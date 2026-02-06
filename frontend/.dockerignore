@@ -1,0 +1,12 @@
+# Tag: config
+# Path: /Users/hodduk/Documents/git/mfa/frontend/.dockerignore
+
+node_modules
+.next
+.git
+.gitignore
+.env*
+README.md
+.vscode
+.idea
+*.md

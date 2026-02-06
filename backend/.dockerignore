@@ -1,0 +1,15 @@
+# Tag: config
+# Path: /Users/hodduk/Documents/git/mfa/backend/.dockerignore
+
+__pycache__
+*.pyc
+.venv
+venv
+.git
+.gitignore
+.env*
+README.md
+.vscode
+.idea
+*.md
+.pytest_cache
