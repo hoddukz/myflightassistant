@@ -4,8 +4,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import DualTimeBar from "@/components/layout/DualTimeBar";
-import BottomNav from "@/components/layout/BottomNav";
+import AppShell from "@/components/layout/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,11 +39,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100`}
       >
-        <DualTimeBar />
-        <main className="pt-10 pb-20 px-4 max-w-lg mx-auto min-h-screen">
-          {children}
-        </main>
-        <BottomNav />
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

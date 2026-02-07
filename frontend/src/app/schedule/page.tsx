@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { uploadICS, uploadCSV } from "@/lib/api";
 import { getEventTypeLabel, getEventTypeColor } from "@/lib/utils";
@@ -15,6 +15,51 @@ export default function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedPairing, setExpandedPairing] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // 월 네비게이터 상태
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+
+  const prevMonth = () =>
+    setSelectedMonth((prev) =>
+      prev.month === 0
+        ? { year: prev.year - 1, month: 11 }
+        : { year: prev.year, month: prev.month - 1 }
+    );
+
+  const nextMonth = () =>
+    setSelectedMonth((prev) =>
+      prev.month === 11
+        ? { year: prev.year + 1, month: 0 }
+        : { year: prev.year, month: prev.month + 1 }
+    );
+
+  const monthLabel = new Date(
+    selectedMonth.year,
+    selectedMonth.month
+  ).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+  const now = useMemo(() => new Date(), []);
+
+  // 선택된 월에 해당하는 이벤트 필터 + 순환식 (지나간 이벤트 하단으로)
+  const filteredPairings = useMemo(() => {
+    const monthStart = new Date(selectedMonth.year, selectedMonth.month, 1);
+    const monthEnd = new Date(selectedMonth.year, selectedMonth.month + 1, 0, 23, 59, 59);
+    const filtered = pairings.filter((p) => {
+      const start = new Date(p.start_utc);
+      const end = new Date(p.end_utc);
+      return start <= monthEnd && end >= monthStart;
+    });
+
+    // 순환식: 지나간 이벤트는 뒤로
+    const firstUpcoming = filtered.findIndex((p) => new Date(p.end_utc) >= now);
+    if (firstUpcoming > 0) {
+      return [...filtered.slice(firstUpcoming), ...filtered.slice(0, firstUpcoming)];
+    }
+    return filtered;
+  }, [pairings, selectedMonth, now]);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -122,23 +167,51 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {/* Month Navigator */}
+      {pairings.length > 0 && (
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={prevMonth}
+            className="w-9 h-9 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center transition-colors"
+          >
+            &lt;
+          </button>
+          <span className="text-sm font-semibold w-28 text-center">
+            {monthLabel}
+          </span>
+          <button
+            onClick={nextMonth}
+            className="w-9 h-9 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center transition-colors"
+          >
+            &gt;
+          </button>
+        </div>
+      )}
+
       {/* Timeline */}
       {pairings.length > 0 && (
         <div className="space-y-2">
-          {pairings.map((p) => (
-            <PairingCard
-              key={p.pairing_id + p.start_utc}
-              pairing={p}
-              expanded={expandedPairing === p.pairing_id + p.start_utc}
-              onToggle={() =>
-                setExpandedPairing(
-                  expandedPairing === p.pairing_id + p.start_utc
-                    ? null
-                    : p.pairing_id + p.start_utc
-                )
-              }
-            />
-          ))}
+          {filteredPairings.length === 0 ? (
+            <p className="text-center text-zinc-600 text-sm py-8">
+              No events in {monthLabel}
+            </p>
+          ) : (
+            filteredPairings.map((p) => (
+              <PairingCard
+                key={p.pairing_id + p.start_utc}
+                pairing={p}
+                passed={new Date(p.end_utc) < now}
+                expanded={expandedPairing === p.pairing_id + p.start_utc}
+                onToggle={() =>
+                  setExpandedPairing(
+                    expandedPairing === p.pairing_id + p.start_utc
+                      ? null
+                      : p.pairing_id + p.start_utc
+                  )
+                }
+              />
+            ))
+          )}
         </div>
       )}
     </div>
@@ -147,10 +220,12 @@ export default function SchedulePage() {
 
 function PairingCard({
   pairing,
+  passed,
   expanded,
   onToggle,
 }: {
   pairing: Pairing;
+  passed: boolean;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -164,13 +239,18 @@ function PairingCard({
   });
 
   return (
-    <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+    <div className={`bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden ${passed ? "opacity-40" : ""}`}>
       {/* Header */}
       <button
         onClick={onToggle}
         className="w-full p-4 flex items-center justify-between text-left"
       >
         <div className="flex items-center gap-3">
+          {passed && (
+            <span className="text-xs bg-zinc-700 text-zinc-500 px-1.5 py-0.5 rounded font-bold">
+              DONE
+            </span>
+          )}
           <span
             className={`text-xs font-bold px-2 py-0.5 rounded ${getEventTypeColor(
               pairing.event_type

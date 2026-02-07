@@ -4,6 +4,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   useSettingsStore,
   type TempUnit,
@@ -13,6 +14,7 @@ import {
 } from "@/stores/settingsStore";
 import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
+import { useAuthStore } from "@/stores/authStore";
 
 type Tab = "settings" | "converter" | "notes";
 
@@ -304,6 +306,9 @@ function NotesTab() {
 
 /* ── Main Page ── */
 export default function SettingsPage() {
+  const router = useRouter();
+  const signOut = useAuthStore((s) => s.signOut);
+  const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>("settings");
 
   const tabs: { key: Tab; label: string }[] = [
@@ -338,6 +343,22 @@ export default function SettingsPage() {
       {tab === "settings" && <SettingsTab />}
       {tab === "converter" && <ConverterTab />}
       {tab === "notes" && <NotesTab />}
+
+      {/* Account */}
+      <div className="pt-4 space-y-3">
+        {user && (
+          <p className="text-xs text-zinc-600 text-center">{user.email}</p>
+        )}
+        <button
+          onClick={async () => {
+            await signOut();
+            router.replace("/login");
+          }}
+          className="w-full bg-zinc-900 border border-zinc-800 text-red-400 hover:bg-zinc-800 text-sm font-medium py-3 rounded-xl transition-colors"
+        >
+          Sign Out
+        </button>
+      </div>
     </div>
   );
 }
