@@ -151,10 +151,25 @@ export default function Dashboard() {
                 }
                 return now > arr;
               }).length;
-              const monthOff = pairings.filter(
-                (p) => p.event_type === "njm" && p.start_utc.slice(0, 7) <= monthStr && p.end_utc.slice(0, 7) >= monthStr
-              );
-              const doneOff = monthOff.filter((p) => new Date(p.end_utc) < now).length;
+              const monthStart = new Date(`${monthStr}-01T00:00:00Z`);
+              const monthEndDate = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+              const monthEndStr = monthEndDate.toISOString().slice(0, 10);
+              let totalOffDays = 0;
+              let doneOffDays = 0;
+              pairings.filter((p) => p.event_type === "njm").forEach((p) => {
+                const s = new Date(p.start_utc);
+                const e = new Date(p.end_utc);
+                const rangeStart = s < monthStart ? monthStart : s;
+                const rangeEnd = e > new Date(`${monthEndStr}T23:59:59Z`) ? new Date(`${monthEndStr}T23:59:59Z`) : e;
+                if (rangeStart > rangeEnd) return;
+                const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
+                totalOffDays += days;
+                // 완료된 오프 날짜: now 이전
+                const doneEnd = now < rangeEnd ? now : rangeEnd;
+                if (doneEnd > rangeStart) {
+                  doneOffDays += Math.ceil((doneEnd.getTime() - rangeStart.getTime()) / 86400000);
+                }
+              });
               return (
                 <>
                   <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800">
@@ -176,9 +191,9 @@ export default function Dashboard() {
                   <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800">
                     <p className="text-zinc-500 text-xs">Off Days</p>
                     <p className="text-xl font-bold font-mono">
-                      <span className="text-blue-400">{doneOff}</span>
+                      <span className="text-blue-400">{doneOffDays}</span>
                       <span className="text-zinc-600">/</span>
-                      {monthOff.length}
+                      {totalOffDays}
                     </p>
                   </div>
                 </>
