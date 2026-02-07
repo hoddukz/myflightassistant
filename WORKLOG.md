@@ -35,6 +35,7 @@
 - [ ] Certification Renewal Tracker
 
 ### 기타
+- [ ] 스케줄 데이터 Supabase DB 저장 (현재 브라우저 로컬 스토리지 → 기기 간 공유 안 됨)
 - [ ] Settings 페이지 실제 토글 기능 구현
 - [ ] Supabase Auth 연동 (실제 인증)
 - [ ] Class C 공항 데이터 airports.json 추가
