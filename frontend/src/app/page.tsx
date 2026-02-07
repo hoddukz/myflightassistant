@@ -90,34 +90,51 @@ export default function Dashboard() {
     return null;
   }, [pairings, now]);
 
-  // 이번 달 통계
+  // 이번 달 통계 (완료/전체)
   const monthlyStats = useMemo(() => {
-    const monthStr = todayStr.slice(0, 7); // "2026-02"
-    let blockMinutes = 0;
-    let creditMinutes = 0;
-    let flightCount = 0;
+    const monthStr = todayStr.slice(0, 7);
+    let totalBlock = 0;
+    let totalCredit = 0;
+    let doneBlock = 0;
+    let doneCredit = 0;
 
     for (const p of pairings) {
       if (p.event_type !== "pairing") continue;
       for (const d of p.days) {
         if (!d.flight_date.startsWith(monthStr)) continue;
-        if (d.day_block) blockMinutes += _parseTime(d.day_block);
-        if (d.day_credit) creditMinutes += _parseTime(d.day_credit);
-        flightCount += d.legs.filter((l) => !l.is_deadhead).length;
+        for (const l of d.legs) {
+          const bm = l.block_time ? _parseTime(l.block_time) : 0;
+          const cm = l.credit_time ? _parseTime(l.credit_time) : 0;
+          totalBlock += bm;
+          totalCredit += cm;
+          if (l.arrive_utc && l.flight_date) {
+            let arr = new Date(`${l.flight_date}T${l.arrive_utc}:00Z`);
+            if (l.depart_utc) {
+              const dep = new Date(`${l.flight_date}T${l.depart_utc}:00Z`);
+              if (arr <= dep) arr = new Date(arr.getTime() + 86400000);
+            }
+            if (now > arr) {
+              doneBlock += bm;
+              doneCredit += cm;
+            }
+          }
+        }
       }
     }
     return {
-      blockHours: _formatMinutes(blockMinutes),
-      creditHours: _formatMinutes(creditMinutes),
-      flightCount,
+      blockTotal: _formatMinutes(totalBlock),
+      blockDone: _formatMinutes(doneBlock),
+      creditTotal: _formatMinutes(totalCredit),
+      creditDone: _formatMinutes(doneCredit),
     };
   }, [pairings, todayStr]);
 
   return (
     <div className="space-y-5">
-      <div className="pt-2">
+      {/* Header: Dashboard 왼쪽, My Flight Assistant 오른쪽 (같은 줄) */}
+      <div className="pt-2 flex items-baseline justify-between">
         <h1 className="text-xl font-bold">Dashboard</h1>
-        <p className="text-zinc-500 text-sm mt-1">My Flight Assistant</p>
+        <p className="text-zinc-500 text-sm">My Flight Assistant</p>
       </div>
 
       {pairings.length === 0 ? (
@@ -133,6 +150,11 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
+          {/* FEBRUARY STATS 라벨 */}
+          <h2 className="text-sm font-semibold text-zinc-400">
+            {now.toLocaleDateString("en-US", { month: "long" }).toUpperCase()} STATS
+          </h2>
+
           {/* 상단 통계 (이번 달 완료/전체) */}
           <div className="grid grid-cols-3 gap-3">
             {(() => {
@@ -164,7 +186,6 @@ export default function Dashboard() {
                 if (rangeStart > rangeEnd) return;
                 const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
                 totalOffDays += days;
-                // 완료된 오프 날짜: now 이전
                 const doneEnd = now < rangeEnd ? now : rangeEnd;
                 if (doneEnd > rangeStart) {
                   doneOffDays += Math.ceil((doneEnd.getTime() - rangeStart.getTime()) / 86400000);
@@ -200,6 +221,29 @@ export default function Dashboard() {
               );
             })()}
           </div>
+
+          {/* Block Hours / Credit Hours (완료/전체) */}
+          <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-zinc-400">Block Hours</span>
+              <span className="text-sm font-mono font-bold">
+                <span className="text-blue-400">{monthlyStats.blockDone}</span>
+                <span className="text-zinc-600">/</span>
+                {monthlyStats.blockTotal}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-zinc-400">Credit Hours</span>
+              <span className="text-sm font-mono font-bold">
+                <span className="text-blue-400">{monthlyStats.creditDone}</span>
+                <span className="text-zinc-600">/</span>
+                {monthlyStats.creditTotal}
+              </span>
+            </div>
+          </div>
+
+          {/* Current Trip 타임라인 */}
+          {currentTrip && <TripTimeline trip={currentTrip} todayStr={todayStr} />}
 
           {/* Next Flight 카운트다운 */}
           {nextFlight && (
@@ -276,7 +320,40 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Today's Flights */}
+          {/* LAYOVER */}
+          {todayLayover && (todayLayover.hotel_name || todayLayover.layover_duration) && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-zinc-400">LAYOVER</h2>
+              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+                {todayLayover.hotel_name && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg mt-0.5">{"\uD83C\uDFE8"}</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{todayLayover.hotel_name}</p>
+                      {todayLayover.hotel_phone && (
+                        <a
+                          href={`tel:${todayLayover.hotel_phone.replace(/[^\d+]/g, "")}`}
+                          className="text-sm text-blue-400 hover:text-blue-300 font-mono mt-1 inline-block"
+                        >
+                          {todayLayover.hotel_phone}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {todayLayover.layover_duration && (
+                  <div className={`flex items-center gap-2 text-sm text-zinc-500 ${todayLayover.hotel_name ? "mt-3 pt-3 border-t border-zinc-800" : ""}`}>
+                    <span>Layover: {todayLayover.layover_duration}</span>
+                    {todayLayover.release_time && (
+                      <span className="text-zinc-600">{"\u00B7"} Release: {todayLayover.release_time}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TODAY'S FLIGHTS */}
           {todayLegs.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-sm font-semibold text-zinc-400">TODAY&apos;S FLIGHTS</h2>
@@ -327,148 +404,155 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-
-          {/* Current Trip 타임라인 */}
-          {currentTrip && <TripTimeline trip={currentTrip} todayStr={todayStr} />}
-
-          {/* 이번 달 통계 */}
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-zinc-400">
-              {now.toLocaleDateString("en-US", { month: "long" }).toUpperCase()} STATS
-            </h2>
-            <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-400">Block Hours</span>
-                <span className="text-sm font-mono font-bold">{monthlyStats.blockHours}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-zinc-400">Credit Hours</span>
-                <span className="text-sm font-mono font-bold">{monthlyStats.creditHours}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 오늘의 레이오버 */}
-          {todayLayover && (todayLayover.hotel_name || todayLayover.layover_duration) && (
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-zinc-400">LAYOVER</h2>
-              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                {todayLayover.hotel_name && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-lg mt-0.5">{"\uD83C\uDFE8"}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{todayLayover.hotel_name}</p>
-                      {todayLayover.hotel_phone && (
-                        <a
-                          href={`tel:${todayLayover.hotel_phone.replace(/[^\d+]/g, "")}`}
-                          className="text-sm text-blue-400 hover:text-blue-300 font-mono mt-1 inline-block"
-                        >
-                          {todayLayover.hotel_phone}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {todayLayover.layover_duration && (
-                  <div className={`flex items-center gap-2 text-sm text-zinc-500 ${todayLayover.hotel_name ? "mt-3 pt-3 border-t border-zinc-800" : ""}`}>
-                    <span>Layover: {todayLayover.layover_duration}</span>
-                    {todayLayover.release_time && (
-                      <span className="text-zinc-600">{"\u00B7"} Release: {todayLayover.release_time}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
   );
 }
 
-/* ─────────── Trip Timeline (비디오 플레이어 스타일) ─────────── */
+/* ─────────── Trip Timeline (공항 기반 + 비행기 아이콘) ─────────── */
 
 function TripTimeline({ trip, todayStr }: { trip: Pairing; todayStr: string }) {
   const days = trip.days.filter((d) => d.legs.length > 0);
   if (days.length === 0) return null;
 
-  const todayIdx = days.findIndex((d) => d.flight_date === todayStr);
   const totalDays = days.length;
+  const todayIdx = days.findIndex((d) => d.flight_date === todayStr);
 
-  // 전체 레그 수 & 완료 레그 수
-  const allLegs = days.flatMap((d) => d.legs);
-  const completedLegs = (() => {
-    let count = 0;
-    for (const d of days) {
-      if (d.flight_date < todayStr) {
-        count += d.legs.length;
-      } else if (d.flight_date === todayStr) {
-        // 오늘: arrive_utc 기준으로 완료 여부
-        const nowUtc = new Date().getTime();
-        for (const leg of d.legs) {
-          if (leg.arrive_utc) {
-            let arrUtc = new Date(`${leg.flight_date}T${leg.arrive_utc}:00Z`);
-            if (leg.depart_utc) {
-              const depUtc = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
-              if (arrUtc < depUtc) arrUtc = new Date(arrUtc.getTime() + 86400000);
-            }
-            if (nowUtc > arrUtc.getTime()) count++;
-          }
-        }
-      }
+  // 오늘의 레그만 추출
+  const todayDay = days.find((d) => d.flight_date === todayStr);
+  const todayLegs = todayDay ? todayDay.legs : [];
+
+  // 오늘의 공항 시퀀스: DTW → ORD → MSP
+  const todayAirports = todayLegs.length > 0
+    ? [todayLegs[0].origin, ...todayLegs.map((l) => l.destination)]
+    : [];
+
+  // summary 포맷: "DTW-ORD-MSP-DTW 3Day" → "3Day DTW-ORD-MSP-DTW"
+  const dayMatch = trip.summary.match(/(\d+Day)$/i);
+  const dayLabel = dayMatch ? dayMatch[1] : `${totalDays}Day`;
+  const routeLabel = trip.summary.replace(/\s*\d+Day$/i, "").trim();
+
+  // 현재 진행 상태 (오늘 레그 기준)
+  const now = new Date();
+  let completedLegs = 0;
+  let flyingProgress = 0;
+  let isFlying = false;
+
+  for (let i = 0; i < todayLegs.length; i++) {
+    const leg = todayLegs[i];
+    if (!leg.depart_utc || !leg.arrive_utc || !leg.flight_date) continue;
+    let dep = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
+    let arr = new Date(`${leg.flight_date}T${leg.arrive_utc}:00Z`);
+    if (arr <= dep) arr = new Date(arr.getTime() + 86400000);
+
+    if (now >= arr) {
+      completedLegs = i + 1;
+    } else if (now >= dep) {
+      completedLegs = i;
+      isFlying = true;
+      flyingProgress = (now.getTime() - dep.getTime()) / (arr.getTime() - dep.getTime());
+      break;
+    } else {
+      break;
     }
-    return count;
-  })();
+  }
 
-  const progress = allLegs.length > 0 ? (completedLegs / allLegs.length) * 100 : 0;
+  // 비행기 위치 (%)
+  let planePct = 0;
+  if (todayAirports.length > 1) {
+    const segments = todayAirports.length - 1;
+    if (completedLegs >= todayLegs.length) {
+      planePct = 100;
+    } else if (isFlying) {
+      planePct = ((completedLegs + flyingProgress) / segments) * 100;
+    } else {
+      planePct = (completedLegs / segments) * 100;
+    }
+  }
+
+  // 오늘 비행 없는 날 (레이오버)
+  if (todayAirports.length === 0) {
+    return (
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-zinc-400">CURRENT TRIP</h2>
+        <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-blue-400">
+              {dayLabel} {routeLabel}
+            </span>
+            <span className="text-xs text-zinc-500">Layover</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-semibold text-zinc-400">CURRENT TRIP</h2>
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
+      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-2">
         {/* 트립 정보 */}
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold text-blue-400">{trip.summary}</span>
+          <span className="text-sm font-bold text-blue-400">
+            {todayAirports.join("-")}
+          </span>
           <span className="text-xs text-zinc-500">
             {todayIdx >= 0 ? `Day ${todayIdx + 1}/${totalDays}` : `${totalDays} days`}
           </span>
         </div>
 
-        {/* 타임라인 바 (비디오 플레이어 스타일) */}
-        <div className="relative">
-          {/* 배경 트랙 */}
-          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-            {/* 진행 바 */}
-            <div
-              className="h-full bg-blue-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(progress, 100)}%` }}
-            />
-          </div>
-
-          {/* Day 마커들 */}
-          <div className="flex justify-between mt-1">
-            {days.map((d, i) => {
-              const isToday = d.flight_date === todayStr;
-              const isPast = d.flight_date < todayStr;
+        {/* 타임라인 */}
+        <div className="mt-1">
+          {/* 트랙 + 점 + 비행기 (같은 높이) */}
+          <div className="relative h-4">
+            {/* 트랙 */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] bg-zinc-800 rounded-full">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                style={{ width: `${planePct}%` }}
+              />
+            </div>
+            {/* 공항 점 */}
+            {todayAirports.map((_, i) => {
+              const pct = todayAirports.length > 1 ? (i / (todayAirports.length - 1)) * 100 : 0;
+              const reached = pct <= planePct + 0.5;
               return (
-                <div key={i} className="flex flex-col items-center" style={{ width: `${100 / totalDays}%` }}>
-                  <div
-                    className={`w-2.5 h-2.5 rounded-full border-2 -mt-[13px] relative z-10 ${
-                      isToday
-                        ? "bg-blue-500 border-blue-400 ring-2 ring-blue-400/30"
-                        : isPast
-                        ? "bg-blue-600 border-blue-700"
-                        : "bg-zinc-700 border-zinc-600"
-                    }`}
-                  />
-                  <span
-                    className={`text-xs mt-1 font-mono ${
-                      isToday ? "text-blue-400 font-bold" : "text-zinc-600"
-                    }`}
-                  >
-                    {i + 1}
-                  </span>
-                </div>
+                <div
+                  key={i}
+                  className={`absolute top-1/2 z-10 w-2.5 h-2.5 rounded-full ${
+                    reached ? "bg-blue-500" : "bg-zinc-700"
+                  }`}
+                  style={{ left: `${pct}%`, transform: "translate(-50%, -50%)" }}
+                />
+              );
+            })}
+            {/* 비행기 */}
+            <div
+              className="absolute top-1/2 z-20 transition-all duration-1000"
+              style={{ left: `${planePct}%`, transform: "translate(-50%, -50%) rotate(45deg)" }}
+            >
+              <span className="text-sm leading-none">{"\u2708\uFE0F"}</span>
+            </div>
+          </div>
+          {/* 공항 라벨 */}
+          <div className="relative h-4 mt-0.5">
+            {todayAirports.map((code, i) => {
+              const pct = todayAirports.length > 1 ? (i / (todayAirports.length - 1)) * 100 : 0;
+              const reached = pct <= planePct + 0.5;
+              const isEdge = i === 0 || i === todayAirports.length - 1;
+              return (
+                <span
+                  key={i}
+                  className={`absolute text-[10px] font-mono whitespace-nowrap ${
+                    isEdge
+                      ? reached ? "text-white font-bold" : "text-zinc-400 font-bold"
+                      : reached ? "text-blue-400" : "text-zinc-600"
+                  }`}
+                  style={{ left: `${pct}%`, transform: "translateX(-50%)" }}
+                >
+                  {code}
+                </span>
               );
             })}
           </div>
@@ -476,7 +560,7 @@ function TripTimeline({ trip, todayStr }: { trip: Pairing; todayStr: string }) {
 
         {/* 레그 진행 상태 */}
         <div className="flex items-center justify-between text-xs text-zinc-500">
-          <span>{completedLegs}/{allLegs.length} legs completed</span>
+          <span>{completedLegs}/{todayLegs.length} legs</span>
           {trip.total_block && <span>Block: {trip.total_block}</span>}
         </div>
       </div>
