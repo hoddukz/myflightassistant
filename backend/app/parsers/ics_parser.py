@@ -54,9 +54,18 @@ def parse_ics(file_content: bytes) -> list[Pairing]:
 
         pairings.append(pairing)
 
+    # 중복 제거 (Google Calendar import 시 동일 이벤트가 다른 UID로 2번 존재할 수 있음)
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[Pairing] = []
+    for p in pairings:
+        key = (p.summary, p.start_utc.isoformat(), p.end_utc.isoformat())
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+
     # 시간순 정렬
-    pairings.sort(key=lambda p: p.start_utc)
-    return pairings
+    unique.sort(key=lambda p: p.start_utc)
+    return unique
 
 
 def _classify_event(uid: str, summary: str, description: str) -> str:

@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   useSettingsStore,
@@ -15,6 +15,7 @@ import {
 import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
+import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow } from "@/lib/api";
 
 type Tab = "settings" | "converter" | "notes";
 
@@ -101,6 +102,7 @@ function SettingsTab() {
           onChange={setTimezoneDisplay}
         />
       </div>
+      <CalendarSyncSection />
       <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
         <p className="text-sm font-medium">Theme</p>
         <p className="text-xs text-zinc-500 mt-2">Cockpit Mode (Dark)</p>
@@ -109,6 +111,168 @@ function SettingsTab() {
         <p className="text-sm font-medium">Version</p>
         <p className="text-xs text-zinc-500 mt-2">MFA v0.1.0</p>
       </div>
+    </div>
+  );
+}
+
+/* ── Calendar Sync Section ── */
+function CalendarSyncSection() {
+  const [url, setUrl] = useState("");
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [syncEnabled, setSyncEnabled] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const { fetchSchedule } = useScheduleStore();
+
+  const loadCalendarUrl = useCallback(async () => {
+    try {
+      const data = await getCalendarUrl();
+      if (data) {
+        setSavedUrl(data.ics_url);
+        setUrl(data.ics_url);
+        setLastSynced(data.last_synced_at);
+        setSyncEnabled(data.sync_enabled);
+      }
+    } catch {
+      // 등록된 URL 없음
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCalendarUrl();
+  }, [loadCalendarUrl]);
+
+  const handleSave = async () => {
+    if (!url.trim()) return;
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+    try {
+      const data = await saveCalendarUrl(url.trim());
+      setSavedUrl(data.ics_url);
+      setLastSynced(data.last_synced_at);
+      setSyncEnabled(data.sync_enabled);
+      setSuccess("Calendar URL saved and synced");
+      await fetchSchedule();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save URL");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    setError(null);
+    setSuccess(null);
+    setSyncing(true);
+    try {
+      await syncNow();
+      setSuccess("Sync completed");
+      await loadCalendarUrl();
+      await fetchSchedule();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+    try {
+      await deleteCalendarUrl();
+      setSavedUrl(null);
+      setUrl("");
+      setLastSynced(null);
+      setSyncEnabled(false);
+      setSuccess("Calendar URL removed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete URL");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatSyncTime = (isoStr: string) => {
+    const d = new Date(isoStr);
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+
+  return (
+    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
+      <p className="text-sm font-medium">Calendar Sync</p>
+      <p className="text-xs text-zinc-500">
+        Enter your Google Calendar private iCal URL to auto-sync your schedule.
+      </p>
+
+      <div className="flex gap-2">
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://calendar.google.com/...basic.ics"
+          className="flex-1 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600"
+          disabled={loading || syncing}
+        />
+        <button
+          onClick={handleSave}
+          disabled={loading || syncing || !url.trim()}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+        >
+          {loading ? "..." : "Save"}
+        </button>
+      </div>
+
+      {savedUrl && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-xs text-zinc-400">Connected</span>
+            </div>
+            {lastSynced && (
+              <span className="text-xs text-zinc-500">
+                Last sync: {formatSyncTime(lastSynced)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSyncNow}
+              disabled={syncing || loading}
+              className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
+            >
+              {syncing ? "Syncing..." : "Sync Now"}
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={loading || syncing}
+              className="px-4 py-2 border border-red-400/30 text-red-400 hover:bg-red-400/10 disabled:opacity-50 text-sm font-medium rounded-lg transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+      {success && (
+        <p className="text-xs text-green-400">{success}</p>
+      )}
     </div>
   );
 }

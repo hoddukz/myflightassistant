@@ -34,10 +34,17 @@ interface DayInfo {
   airports: string[];
 }
 
+interface TripInfo {
+  pairingId: string;
+  summary: string;
+  days: DayInfo[];
+}
+
 type SortedLeg = FlightLeg & { passed: boolean };
 
 export default function BriefingPage() {
   const { pairings } = useScheduleStore();
+  const [activeTripIndex, setActiveTripIndex] = useState(0);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -57,12 +64,13 @@ export default function BriefingPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 스케줄에서 비행일 추출
-  const days: DayInfo[] = useMemo(() => {
-    const dayList: DayInfo[] = [];
+  // 스케줄에서 트립별 비행일 추출
+  const trips: TripInfo[] = useMemo(() => {
+    const tripList: TripInfo[] = [];
     for (const p of pairings) {
       if (p.event_type !== "pairing") continue;
       if (new Date(p.end_utc) < now) continue;
+      const dayList: DayInfo[] = [];
       for (const d of p.days) {
         if (d.legs.length === 0) continue;
         const airports = new Set<string>();
@@ -82,14 +90,37 @@ export default function BriefingPage() {
           airports: Array.from(airports),
         });
       }
+      if (dayList.length > 0) {
+        tripList.push({
+          pairingId: p.pairing_id,
+          summary: p.summary,
+          days: dayList,
+        });
+      }
     }
-    return dayList;
+    return tripList;
   }, [pairings, now]);
+
+  const days = trips[activeTripIndex]?.days ?? [];
 
   // 스케줄 없으면 검색 모드
   useEffect(() => {
-    if (days.length === 0) setSearchOpen(true);
-  }, [days.length]);
+    if (trips.length === 0) setSearchOpen(true);
+  }, [trips.length]);
+
+  // trips 변경 시 인덱스 범위 보정
+  useEffect(() => {
+    if (activeTripIndex >= trips.length && trips.length > 0) {
+      setActiveTripIndex(0);
+      setActiveDayIndex(0);
+    }
+  }, [trips.length, activeTripIndex]);
+
+  // 트립 변경 시 Day 인덱스 리셋
+  const handleTripChange = useCallback((idx: number) => {
+    setActiveTripIndex(idx);
+    setActiveDayIndex(0);
+  }, []);
 
   // 레그 시간 기반 순환 정렬: 지나간 레그 하단, 다음 레그 상단
   const sortedLegs: SortedLeg[] = useMemo(() => {
@@ -235,23 +266,64 @@ export default function BriefingPage() {
         </button>
       </div>
 
-      {/* Day 탭 */}
-      {days.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {days.map((day, i) => (
+      {/* Trip 네비게이터 + Day 탭 */}
+      {trips.length > 0 && (
+        <div className="space-y-2">
+          {/* Trip 네비게이터 (좌우 화살표) */}
+          <div className="flex items-center gap-2">
             <button
-              key={i}
-              onClick={() => setActiveDayIndex(i)}
-              className={`shrink-0 px-3 py-2 rounded-lg transition-colors ${
-                activeDayIndex === i
-                  ? "bg-blue-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-              }`}
+              onClick={() => handleTripChange(activeTripIndex - 1)}
+              disabled={activeTripIndex === 0}
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
             >
-              <div className="text-xs font-bold">Day {i + 1}</div>
-              <div className="text-xs opacity-70">{day.dateFormatted}</div>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
-          ))}
+            <div className="flex-1 text-center">
+              <div>
+                <span className="text-sm font-bold text-blue-400">
+                  Trip {activeTripIndex + 1}/{trips.length}
+                </span>
+                <span className="text-sm text-zinc-500 ml-2">
+                  {trips[activeTripIndex]?.pairingId}
+                </span>
+              </div>
+              {trips[activeTripIndex]?.days.length > 0 && (
+                <div className="text-xs text-zinc-500 mt-0.5">
+                  {trips[activeTripIndex].days[0].dateFormatted}
+                  {trips[activeTripIndex].days.length > 1 &&
+                    ` — ${trips[activeTripIndex].days[trips[activeTripIndex].days.length - 1].dateFormatted}`}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => handleTripChange(activeTripIndex + 1)}
+              disabled={activeTripIndex >= trips.length - 1}
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          {/* Day 탭 */}
+          <div className={`flex gap-1.5 pb-1 ${days.length >= 5 ? "overflow-x-auto" : ""}`}>
+            {days.map((day, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveDayIndex(i)}
+                className={`${days.length >= 5 ? "shrink-0" : "flex-1 min-w-0"} px-3 py-2 rounded-lg transition-colors ${
+                  activeDayIndex === i
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <div className="text-xs font-bold">Day {i + 1}</div>
+                <div className="text-xs opacity-70 truncate">{day.dateFormatted}</div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -389,15 +461,15 @@ function LegBriefingBlock({
         <table className="text-xs font-mono text-zinc-500 mx-auto">
           <tbody>
             <tr>
-              <td className="text-right pr-1">{leg.depart_local}{leg.depart_tz || ""}</td>
+              <td className="pr-2">{leg.depart_local}</td>
               <td className="text-center text-zinc-600 px-1">{"\u2192"}</td>
-              <td className="pr-1">{leg.arrive_local}{leg.arrive_tz || ""}</td>
+              <td className="pr-2">{leg.arrive_local}</td>
               <td className="text-zinc-600 pl-2">block</td>
             </tr>
             <tr className="text-zinc-600">
-              <td className="text-right pr-1">{leg.depart_utc ? `${leg.depart_utc}Z` : ""}</td>
+              <td className="pr-2">{leg.depart_utc ? `${leg.depart_utc}Z` : ""}</td>
               <td />
-              <td className="pr-1">{leg.arrive_utc ? `${leg.arrive_utc}Z` : ""}</td>
+              <td className="pr-2">{leg.arrive_utc ? `${leg.arrive_utc}Z` : ""}</td>
               <td className="pl-2">{leg.block_time || ""}</td>
             </tr>
           </tbody>
@@ -667,7 +739,7 @@ function AirportBriefingCard({
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs text-zinc-500 font-mono">
-                            {fc.timeFrom || ""} {"\u2192"} {fc.timeTo || ""}
+                            {_formatFcTime(fc.timeFrom)} {"\u2192"} {_formatFcTime(fc.timeTo)}
                           </span>
                           <span
                             className={`text-xs font-bold ${
@@ -680,7 +752,7 @@ function AirportBriefingCard({
                         <div className="flex gap-3 text-xs font-mono text-zinc-400">
                           {fc.wdir != null && (
                             <span>
-                              W {fc.wdir}\u00B0/{fc.wspd}kt
+                              W {fc.wdir}{"°"}/{fc.wspd}kt
                             </span>
                           )}
                           {fc.visib != null && <span>V {fc.visib}sm</span>}
@@ -808,4 +880,15 @@ function _determineFcCategory(fc: any): string {
 
 function _catOrder(cat: string): number {
   return { VFR: 0, MVFR: 1, IFR: 2, LIFR: 3 }[cat] || 0;
+}
+
+function _formatFcTime(epoch: number | string | null | undefined): string {
+  if (epoch == null) return "--";
+  const ts = typeof epoch === "string" ? Number(epoch) : epoch;
+  if (Number.isNaN(ts)) return String(epoch);
+  const d = new Date(ts * 1000);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${dd}/${hh}${mm}Z`;
 }

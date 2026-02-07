@@ -16,18 +16,19 @@ from app.models.schemas import (
 
 
 def save_schedule(user_id: str, email: str, pairings: list[Pairing]) -> None:
-    """기존 스케줄 삭제 후 새 스케줄을 DB에 저장한다."""
+    """기존 스케줄 삭제 후 새 스케줄을 DB에 저장한다. (배치 insert 최적화)"""
     db = get_supabase()
 
-    # public.users에 레코드가 없으면 생성 (auth.users와 동기화)
+    # 1) users upsert + 기존 데이터 삭제 (2 requests)
     db.table("users").upsert({"id": user_id, "email": email}, on_conflict="id").execute()
-
-    # 기존 데이터 삭제 (CASCADE로 하위 테이블도 삭제됨)
     db.table("pairings").delete().eq("user_id", user_id).execute()
 
-    for p in pairings:
-        # pairing 저장
-        pairing_row = db.table("pairings").insert({
+    if not pairings:
+        return
+
+    # 2) pairings 배치 insert (1 request)
+    pairing_inserts = [
+        {
             "user_id": user_id,
             "pairing_id": p.pairing_id,
             "summary": p.summary,
@@ -37,36 +38,42 @@ def save_schedule(user_id: str, email: str, pairings: list[Pairing]) -> None:
             "total_block": p.total_block,
             "total_credit": p.total_credit,
             "tafb": p.tafb,
-        }).execute()
+        }
+        for p in pairings
+    ]
+    pairing_result = db.table("pairings").insert(pairing_inserts).execute()
+    db_pairing_ids = [r["id"] for r in pairing_result.data]
 
-        db_pairing_id = pairing_row.data[0]["id"]
+    # 3) day_summaries + layovers 배치 수집 후 insert (최대 2 requests)
+    day_inserts: list[dict] = []
+    layover_inserts: list[dict] = []
+    # leg 데이터도 함께 수집 (crew 정보 별도 보관)
+    leg_inserts: list[dict] = []
+    leg_crews: list[list] = []  # leg_inserts와 동일 인덱스
 
+    for i, p in enumerate(pairings):
+        db_pid = db_pairing_ids[i]
         for day in p.days:
-            # day_summary 저장
-            db.table("day_summaries").insert({
-                "pairing_id": db_pairing_id,
+            day_inserts.append({
+                "pairing_id": db_pid,
                 "flight_date": day.flight_date.isoformat(),
                 "report_time": day.report_time,
                 "day_block": day.day_block,
                 "day_credit": day.day_credit,
                 "duty_time": day.duty_time,
-            }).execute()
-
-            # layover 저장
+            })
             if day.layover:
-                db.table("layovers").insert({
-                    "pairing_id": db_pairing_id,
+                layover_inserts.append({
+                    "pairing_id": db_pid,
                     "hotel_name": day.layover.hotel_name,
                     "hotel_phone": day.layover.hotel_phone,
                     "layover_duration": day.layover.layover_duration,
                     "release_time": day.layover.release_time,
                     "flight_date": day.layover.flight_date.isoformat(),
-                }).execute()
-
-            # flight_legs 저장
+                })
             for leg in day.legs:
-                leg_row = db.table("flight_legs").insert({
-                    "pairing_id": db_pairing_id,
+                leg_inserts.append({
+                    "pairing_id": db_pid,
                     "leg_number": leg.leg_number,
                     "flight_number": leg.flight_number,
                     "ac_type": leg.ac_type,
@@ -81,96 +88,79 @@ def save_schedule(user_id: str, email: str, pairings: list[Pairing]) -> None:
                     "credit_time": leg.credit_time,
                     "is_deadhead": leg.is_deadhead,
                     "flight_date": leg.flight_date.isoformat(),
-                }).execute()
+                })
+                leg_crews.append(leg.crew)
 
-                db_leg_id = leg_row.data[0]["id"]
+    if day_inserts:
+        db.table("day_summaries").insert(day_inserts).execute()
+    if layover_inserts:
+        db.table("layovers").insert(layover_inserts).execute()
 
-                # crew 저장
-                for crew in leg.crew:
-                    db.table("crew_assignments").insert({
-                        "flight_leg_id": db_leg_id,
-                        "position": crew.position,
-                        "employee_id": crew.employee_id,
-                        "name": crew.name,
-                    }).execute()
+    # 4) flight_legs 배치 insert (1 request)
+    if leg_inserts:
+        leg_result = db.table("flight_legs").insert(leg_inserts).execute()
+        db_leg_ids = [r["id"] for r in leg_result.data]
+
+        # 5) crew_assignments 배치 insert (1 request)
+        crew_inserts: list[dict] = []
+        for j, crews in enumerate(leg_crews):
+            db_leg_id = db_leg_ids[j]
+            for crew in crews:
+                crew_inserts.append({
+                    "flight_leg_id": db_leg_id,
+                    "position": crew.position,
+                    "employee_id": crew.employee_id,
+                    "name": crew.name,
+                })
+        if crew_inserts:
+            db.table("crew_assignments").insert(crew_inserts).execute()
 
 
 def get_schedule(user_id: str) -> Optional[ScheduleResponse]:
-    """DB에서 사용자의 스케줄을 조회하여 ScheduleResponse로 구성한다."""
+    """DB에서 사용자의 스케줄을 조회하여 ScheduleResponse로 구성한다. (single nested query)"""
     db = get_supabase()
 
-    # 페어링 조회
-    pairing_rows = (
+    # 단일 nested join 쿼리로 모든 데이터를 한번에 가져온다 (1 request)
+    result = (
         db.table("pairings")
-        .select("*")
+        .select("*, day_summaries(*), layovers(*), flight_legs(*, crew_assignments(*))")
         .eq("user_id", user_id)
         .order("start_utc")
         .execute()
     )
 
-    if not pairing_rows.data:
+    if not result.data:
         return None
 
     pairings: list[Pairing] = []
     total_flights = 0
 
-    for pr in pairing_rows.data:
-        db_pid = pr["id"]
+    for pr in result.data:
+        # day_summaries — flight_date 기준 정렬
+        day_rows = sorted(pr.get("day_summaries", []), key=lambda x: x["flight_date"])
 
-        # day_summaries 조회
-        day_rows = (
-            db.table("day_summaries")
-            .select("*")
-            .eq("pairing_id", db_pid)
-            .order("flight_date")
-            .execute()
-        )
-
-        # layovers 조회
-        layover_rows = (
-            db.table("layovers")
-            .select("*")
-            .eq("pairing_id", db_pid)
-            .execute()
-        )
+        # layovers — flight_date으로 인덱싱
         layover_map: dict[str, dict] = {}
-        for lr in layover_rows.data:
+        for lr in pr.get("layovers", []):
             layover_map[lr["flight_date"]] = lr
 
-        # flight_legs 조회
-        leg_rows = (
-            db.table("flight_legs")
-            .select("*")
-            .eq("pairing_id", db_pid)
-            .order("flight_date")
-            .order("leg_number")
-            .execute()
+        # flight_legs — flight_date, leg_number 기준 정렬
+        leg_rows = sorted(
+            pr.get("flight_legs", []),
+            key=lambda x: (x["flight_date"], x["leg_number"]),
         )
-
-        # crew 조회 (모든 legs의 crew를 한번에)
-        leg_ids = [lr["id"] for lr in leg_rows.data]
-        crew_map: dict[str, list[dict]] = {}
-        if leg_ids:
-            crew_rows = (
-                db.table("crew_assignments")
-                .select("*")
-                .in_("flight_leg_id", leg_ids)
-                .execute()
-            )
-            for cr in crew_rows.data:
-                crew_map.setdefault(cr["flight_leg_id"], []).append(cr)
 
         # legs를 날짜별로 그룹핑
         legs_by_date: dict[str, list[FlightLeg]] = {}
-        for lr in leg_rows.data:
+        for lr in leg_rows:
             flight_date_str = lr["flight_date"]
             crew_list = [
                 CrewMember(
                     position=c["position"],
-                    employee_id=c["employee_id"] or "",
-                    name=c["name"] or "",
+                    employee_id=c.get("employee_id") or "",
+                    name=c.get("name") or "",
                 )
-                for c in crew_map.get(lr["id"], [])
+                for c in lr.get("crew_assignments", [])
             ]
             leg = FlightLeg(
                 leg_number=lr["leg_number"],
@@ -194,7 +184,7 @@ def get_schedule(user_id: str) -> Optional[ScheduleResponse]:
 
         # DayDetail 구성
         days: list[DayDetail] = []
-        for dr in day_rows.data:
+        for dr in day_rows:
             fd = dr["flight_date"]
             layover_data = layover_map.get(fd)
             layover = None

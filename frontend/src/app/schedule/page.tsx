@@ -3,18 +3,51 @@
 
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { uploadICS, uploadCSV } from "@/lib/api";
+import { uploadICS, uploadCSV, getCalendarUrl, syncNow } from "@/lib/api";
 import { getEventTypeLabel, getEventTypeColor } from "@/lib/utils";
 import type { Pairing, ScheduleResponse } from "@/types";
 
 export default function SchedulePage() {
-  const { pairings, setPairings, clearSchedule } = useScheduleStore();
+  const router = useRouter();
+  const { pairings, setPairings, clearSchedule, fetchSchedule } = useScheduleStore();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedPairing, setExpandedPairing] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+
+  // 페이지 마운트 시 DB에서 스케줄 로드 + 캘린더 연동 상태 확인
+  useEffect(() => {
+    fetchSchedule();
+    getCalendarUrl()
+      .then((data) => {
+        if (data && data.ics_url) {
+          setCalendarConnected(true);
+          setLastSynced(data.last_synced_at);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await syncNow();
+      setPairings(data);
+      const updated = await getCalendarUrl();
+      if (updated) setLastSynced(updated.last_synced_at);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // 월 네비게이터 상태
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -126,40 +159,71 @@ export default function SchedulePage() {
         )}
       </div>
 
-      {/* Upload Area */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-          dragOver
-            ? "border-blue-400 bg-blue-400/10"
-            : "border-zinc-700 hover:border-zinc-500"
-        }`}
-      >
-        <input
-          type="file"
-          accept=".ics,.csv"
-          onChange={handleInputChange}
-          className="hidden"
-          id="file-upload"
-          disabled={uploading}
-        />
-        <label
-          htmlFor="file-upload"
-          className="cursor-pointer flex flex-col items-center gap-3"
+      {/* Upload Area / Calendar Connected */}
+      {calendarConnected ? (
+        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 text-center space-y-3">
+          <div className="flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-sm text-zinc-300 font-medium">Google Calendar Connected</span>
+          </div>
+          {lastSynced && (
+            <p className="text-xs text-zinc-500">
+              Last sync: {new Date(lastSynced).toLocaleString("en-US", {
+                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+              })}
+            </p>
+          )}
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={handleSyncNow}
+              disabled={syncing}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
+            >
+              {syncing ? "Syncing..." : "Sync Now"}
+            </button>
+            <button
+              onClick={() => router.push("/settings")}
+              className="px-4 py-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
+            >
+              Settings
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+            dragOver
+              ? "border-blue-400 bg-blue-400/10"
+              : "border-zinc-700 hover:border-zinc-500"
+          }`}
         >
-          <span className="text-3xl">{uploading ? "..." : "\u{1F4E4}"}</span>
-          <span className="text-sm text-zinc-400">
-            {uploading
-              ? "Parsing schedule..."
-              : "Drop .ics or .csv file here, or tap to browse"}
-          </span>
-        </label>
-      </div>
+          <input
+            type="file"
+            accept=".ics,.csv"
+            onChange={handleInputChange}
+            className="hidden"
+            id="file-upload"
+            disabled={uploading}
+          />
+          <label
+            htmlFor="file-upload"
+            className="cursor-pointer flex flex-col items-center gap-3"
+          >
+            <span className="text-3xl">{uploading ? "..." : "\u{1F4E4}"}</span>
+            <span className="text-sm text-zinc-400">
+              {uploading
+                ? "Parsing schedule..."
+                : "Drop .ics or .csv file here, or tap to browse"}
+            </span>
+          </label>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-sm text-red-300">

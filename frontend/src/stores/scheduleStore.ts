@@ -34,9 +34,10 @@ export const useScheduleStore = create<ScheduleState>()((set) => ({
     set({ loading: true });
     try {
       const data: ScheduleResponse = await apiFetchSchedule();
+      console.log("[scheduleStore] API returned:", data.pairings.length, "pairings,", data.total_flights, "flights");
       set({ pairings: data.pairings, totalFlights: data.total_flights });
-    } catch {
-      // 스케줄이 없으면 빈 상태 유지
+    } catch (err) {
+      console.error("[scheduleStore] fetchSchedule failed:", err);
     } finally {
       set({ loading: false });
     }
