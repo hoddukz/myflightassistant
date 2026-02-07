@@ -14,8 +14,8 @@ export default function Dashboard() {
   const todayStr = now.toISOString().slice(0, 10);
 
   const upcomingPairings = pairings
-    .filter((p) => p.event_type !== "njm" && new Date(p.end_utc) >= now && new Date(p.start_utc).toISOString().slice(0, 10) !== todayStr)
-    .slice(0, 3);
+    .filter((p) => new Date(p.end_utc) >= now && new Date(p.start_utc).toISOString().slice(0, 10) !== todayStr)
+    .slice(0, 6);
 
   const todayLegsRaw = pairings
     .filter((p) => p.event_type === "pairing")
