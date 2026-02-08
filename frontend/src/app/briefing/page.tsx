@@ -498,6 +498,15 @@ function LegBriefingBlock({
         onToggle={() => onToggleCard(cardKeyDest)}
         onRetry={() => onRetry(leg.destination)}
         label="ARR"
+        arrivalEpoch={(() => {
+          if (!leg.arrive_utc || !leg.flight_date) return undefined;
+          let arr = new Date(`${leg.flight_date}T${leg.arrive_utc}:00Z`);
+          if (leg.depart_utc) {
+            const dep = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
+            if (arr < dep) arr = new Date(arr.getTime() + 86400000);
+          }
+          return Math.floor(arr.getTime() / 1000);
+        })()}
       />
     </div>
   );
@@ -514,6 +523,7 @@ function AirportBriefingCard({
   onToggle,
   onRetry,
   label,
+  arrivalEpoch,
 }: {
   station: string;
   briefing: any;
@@ -523,6 +533,7 @@ function AirportBriefingCard({
   onToggle: () => void;
   onRetry?: () => void;
   label?: string;
+  arrivalEpoch?: number;
 }) {
   const [detailTab, setDetailTab] = useState<"metar" | "taf" | "notam">(
     "metar"
@@ -730,17 +741,31 @@ function AirportBriefingCard({
                   <p className="text-xs text-zinc-500">Forecast Periods</p>
                   {taf.forecasts.map((fc: any, i: number) => {
                     const fcCat = _determineFcCategory(fc);
+                    const fcFrom = typeof fc.timeFrom === "string" ? Number(fc.timeFrom) : fc.timeFrom;
+                    const fcTo = typeof fc.timeTo === "string" ? Number(fc.timeTo) : fc.timeTo;
+                    const isArrivalPeriod = arrivalEpoch != null &&
+                      fcFrom != null && fcTo != null &&
+                      arrivalEpoch >= fcFrom && arrivalEpoch < fcTo;
                     return (
                       <div
                         key={i}
-                        className={`bg-zinc-900/50 rounded-lg p-3 ${
-                          CATEGORY_BG[fcCat] || ""
+                        className={`rounded-lg p-3 ${
+                          isArrivalPeriod
+                            ? "bg-amber-500/15 ring-1 ring-amber-500/50"
+                            : `bg-zinc-900/50 ${CATEGORY_BG[fcCat] || ""}`
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-zinc-500 font-mono">
-                            {_formatFcTime(fc.timeFrom)} {"\u2192"} {_formatFcTime(fc.timeTo)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-zinc-500 font-mono">
+                              {_formatFcTime(fc.timeFrom)} {"\u2192"} {_formatFcTime(fc.timeTo)}
+                            </span>
+                            {isArrivalPeriod && (
+                              <span className="text-[10px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                                ETA
+                              </span>
+                            )}
+                          </div>
                           <span
                             className={`text-xs font-bold ${
                               CATEGORY_COLORS[fcCat] || ""
