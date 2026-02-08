@@ -12,7 +12,7 @@ from app.dependencies.auth import get_current_user
 from app.models.schemas import FlightLegCSV, ScheduleResponse
 from app.parsers.csv_parser import parse_csv
 from app.parsers.ics_parser import parse_ics
-from app.services.schedule_db import save_schedule, get_schedule
+from app.services.schedule_db import save_schedule, get_schedule, delete_schedule
 from app.services.calendar_sync import (
     fetch_ics_content,
     sync_calendar,
@@ -95,6 +95,16 @@ async def get_user_schedule(
     if result is None:
         return ScheduleResponse(pairings=[], total_flights=0)
     return result
+
+
+@router.delete("")
+async def delete_user_schedule(
+    current_user: dict = Depends(get_current_user),
+):
+    """현재 사용자의 스케줄을 DB에서 삭제한다."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, partial(delete_schedule, current_user["id"]))
+    return {"message": "Schedule deleted"}
 
 
 @router.get("/sync-status")

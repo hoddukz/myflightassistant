@@ -116,6 +116,12 @@ def save_schedule(user_id: str, email: str, pairings: list[Pairing]) -> None:
             db.table("crew_assignments").insert(crew_inserts).execute()
 
 
+def delete_schedule(user_id: str) -> None:
+    """사용자의 스케줄을 DB에서 삭제한다. (CASCADE로 하위 테이블 자동 삭제)"""
+    db = get_supabase()
+    db.table("pairings").delete().eq("user_id", user_id).execute()
+
+
 def get_schedule(user_id: str) -> Optional[ScheduleResponse]:
     """DB에서 사용자의 스케줄을 조회하여 ScheduleResponse로 구성한다. (single nested query)"""
     db = get_supabase()

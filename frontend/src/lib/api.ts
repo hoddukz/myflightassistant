@@ -83,6 +83,22 @@ export async function fetchSchedule() {
   return res.json();
 }
 
+export async function deleteSchedule() {
+  const headers = await getAuthHeaders();
+
+  const res = await fetch(`${API_BASE}/api/schedule`, {
+    method: "DELETE",
+    headers,
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "Failed to delete schedule");
+  }
+
+  return res.json();
+}
+
 export async function fetchFullBriefing(station: string) {
   const res = await fetch(`${API_BASE}/api/briefing/full/${station}`);
   if (!res.ok) {

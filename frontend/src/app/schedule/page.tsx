@@ -6,7 +6,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { uploadICS, uploadCSV, getCalendarUrl, syncNow } from "@/lib/api";
+import { uploadICS, uploadCSV, getCalendarUrl, syncNow, deleteSchedule } from "@/lib/api";
 import { getEventTypeLabel, getEventTypeColor } from "@/lib/utils";
 import type { Pairing, ScheduleResponse } from "@/types";
 
@@ -20,6 +20,8 @@ export default function SchedulePage() {
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   // 페이지 마운트 시 DB에서 스케줄 로드 + 캘린더 연동 상태 확인
   useEffect(() => {
@@ -151,7 +153,7 @@ export default function SchedulePage() {
         </div>
         {pairings.length > 0 && (
           <button
-            onClick={clearSchedule}
+            onClick={() => setShowClearConfirm(true)}
             className="text-xs text-red-400 hover:text-red-300 border border-red-400/30 px-3 py-1.5 rounded-lg"
           >
             Clear
@@ -276,6 +278,46 @@ export default function SchedulePage() {
               />
             ))
           )}
+        </div>
+      )}
+
+      {/* Clear Confirm Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-base font-semibold text-white">Clear Schedule</h3>
+            <p className="text-sm text-zinc-400 mt-2">
+              Are you sure you want to clear your schedule? This cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearing}
+                className="px-4 py-2 text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setClearing(true);
+                  try {
+                    await deleteSchedule();
+                    clearSchedule();
+                    setShowClearConfirm(false);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Failed to clear schedule");
+                    setShowClearConfirm(false);
+                  } finally {
+                    setClearing(false);
+                  }
+                }}
+                disabled={clearing}
+                className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:text-red-300 rounded-lg transition-colors font-medium"
+              >
+                {clearing ? "Clearing..." : "Confirm"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
