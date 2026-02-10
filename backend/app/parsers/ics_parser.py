@@ -141,13 +141,13 @@ def _parse_pairing(
 
 
 def _local_to_utc(flight_date: date, local_time: str, tz_name: str) -> Optional[str]:
-    """로컬 시간(HH:MM)을 UTC 시간(HH:MM)으로 변환한다."""
+    """로컬 시간(HH:MM)을 UTC ISO datetime으로 변환한다."""
     try:
         tz = ZoneInfo(tz_name)
         hour, minute = map(int, local_time.split(":"))
         local_dt = datetime(flight_date.year, flight_date.month, flight_date.day, hour, minute, tzinfo=tz)
         utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
-        return utc_dt.strftime("%H:%M")
+        return utc_dt.strftime("%Y-%m-%dT%H:%M:00Z")
     except Exception:
         return None
 

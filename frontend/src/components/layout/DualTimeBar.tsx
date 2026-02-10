@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useScheduleStore } from "@/stores/scheduleStore";
+import { toUtcDate } from "@/lib/utils";
 
 export default function DualTimeBar() {
   const [now, setNow] = useState(new Date());
@@ -28,9 +29,7 @@ export default function DualTimeBar() {
         // report_time_utc 우선, 없으면 report_time을 UTC로 해석
         const rtUtc = d.report_time_utc || d.report_time;
         if (!rtUtc) continue;
-        const reportDateTime = new Date(
-          `${d.flight_date}T${rtUtc}:00Z`
-        );
+        const reportDateTime = toUtcDate(rtUtc, d.flight_date);
         if (reportDateTime.getTime() > nowUtc) {
           return reportDateTime;
         }

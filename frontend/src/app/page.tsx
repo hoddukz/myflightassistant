@@ -5,8 +5,9 @@
 
 import { useMemo } from "react";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { getEventTypeLabel, getEventTypeColor } from "@/lib/utils";
+import { getEventTypeLabel, getEventTypeColor, toUtcDate, utcHHMM } from "@/lib/utils";
 import Link from "next/link";
+import InboundAircraft from "@/components/dashboard/InboundAircraft";
 import type { Pairing, DayDetail } from "@/types";
 
 export default function Dashboard() {
@@ -46,9 +47,9 @@ export default function Dashboard() {
     const mapped = raw.map((leg) => {
       let passed = false;
       if (leg.arrive_utc && leg.flight_date) {
-        let arrUtc = new Date(`${leg.flight_date}T${leg.arrive_utc}:00Z`);
+        let arrUtc = toUtcDate(leg.arrive_utc, leg.flight_date);
         if (leg.depart_utc) {
-          const depUtc = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
+          const depUtc = toUtcDate(leg.depart_utc, leg.flight_date);
           if (arrUtc < depUtc) arrUtc = new Date(arrUtc.getTime() + 86400000);
         }
         passed = nowUtc > arrUtc.getTime();
@@ -80,7 +81,7 @@ export default function Dashboard() {
       for (const d of p.days) {
         for (const leg of d.legs) {
           if (!leg.depart_utc || !leg.flight_date) continue;
-          const depUtc = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
+          const depUtc = toUtcDate(leg.depart_utc, leg.flight_date);
           if (depUtc > now) {
             return { leg, depUtc, day: d, pairing: p };
           }
@@ -89,6 +90,30 @@ export default function Dashboard() {
     }
     return null;
   }, [pairings, now]);
+
+  // 현재 레그에 tail 없으면 같은 트립에서 역순 탐색
+  const effectiveTailNumber = useMemo(() => {
+    if (!nextFlight) return null;
+    if (nextFlight.leg.tail_number) return nextFlight.leg.tail_number;
+
+    // 트립 전체 레그를 순서대로 펼침
+    const allLegs = nextFlight.pairing.days.flatMap((d) => d.legs);
+
+    // 현재 레그 위치 찾기
+    const curIdx = allLegs.findIndex(
+      (l) =>
+        l.flight_number === nextFlight.leg.flight_number &&
+        l.flight_date === nextFlight.leg.flight_date &&
+        l.origin === nextFlight.leg.origin
+    );
+    if (curIdx < 0) return null;
+
+    // 바로 직전 레그부터 역순으로 tail 탐색
+    for (let i = curIdx - 1; i >= 0; i--) {
+      if (allLegs[i].tail_number) return allLegs[i].tail_number;
+    }
+    return null;
+  }, [nextFlight]);
 
   // 이번 달 통계 (완료/전체)
   const monthlyStats = useMemo(() => {
@@ -108,9 +133,9 @@ export default function Dashboard() {
           totalBlock += bm;
           totalCredit += cm;
           if (l.arrive_utc && l.flight_date) {
-            let arr = new Date(`${l.flight_date}T${l.arrive_utc}:00Z`);
+            let arr = toUtcDate(l.arrive_utc, l.flight_date);
             if (l.depart_utc) {
-              const dep = new Date(`${l.flight_date}T${l.depart_utc}:00Z`);
+              const dep = toUtcDate(l.depart_utc, l.flight_date);
               if (arr <= dep) arr = new Date(arr.getTime() + 86400000);
             }
             if (now > arr) {
@@ -166,9 +191,9 @@ export default function Dashboard() {
               const monthLegs = monthTrips.flatMap((p) => p.days).filter((d) => d.flight_date.startsWith(monthStr)).flatMap((d) => d.legs).filter((l) => !l.is_deadhead);
               const doneLegs = monthLegs.filter((l) => {
                 if (!l.arrive_utc || !l.flight_date) return false;
-                let arr = new Date(`${l.flight_date}T${l.arrive_utc}:00Z`);
+                let arr = toUtcDate(l.arrive_utc, l.flight_date);
                 if (l.depart_utc) {
-                  const dep = new Date(`${l.flight_date}T${l.depart_utc}:00Z`);
+                  const dep = toUtcDate(l.depart_utc, l.flight_date);
                   if (arr < dep) arr = new Date(arr.getTime() + 86400000);
                 }
                 return now > arr;
@@ -222,8 +247,8 @@ export default function Dashboard() {
             })()}
           </div>
 
-          {/* Block Hours / Credit Hours (완료/전체) */}
-          <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
+          {/* Block Hours (완료/전체) */}
+          <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
             <div className="flex justify-between items-center">
               <span className="text-sm text-zinc-400">Block Hours</span>
               <span className="text-sm font-mono font-bold">
@@ -232,15 +257,15 @@ export default function Dashboard() {
                 {monthlyStats.blockTotal}
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-zinc-400">Credit Hours</span>
-              <span className="text-sm font-mono font-bold">
-                <span className="text-blue-400">{monthlyStats.creditDone}</span>
-                <span className="text-zinc-600">/</span>
-                {monthlyStats.creditTotal}
-              </span>
-            </div>
           </div>
+
+          {/* Inbound Aircraft Tracker */}
+          {nextFlight && (
+            <InboundAircraft
+              tailNumber={effectiveTailNumber}
+              destination={nextFlight.leg.origin}
+            />
+          )}
 
           {/* Current Trip 타임라인 */}
           {currentTrip && <TripTimeline trip={currentTrip} todayStr={todayStr} />}
@@ -282,6 +307,39 @@ export default function Dashboard() {
             </Link>
           )}
 
+          {/* LAYOVER */}
+          {todayLayover && (todayLayover.hotel_name || todayLayover.layover_duration) && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-zinc-400">LAYOVER</h2>
+              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+                {todayLayover.hotel_name && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg mt-0.5">{"\uD83C\uDFE8"}</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{todayLayover.hotel_name}</p>
+                      {todayLayover.hotel_phone && (
+                        <a
+                          href={`tel:${todayLayover.hotel_phone.replace(/[^\d+]/g, "")}`}
+                          className="text-sm text-blue-400 hover:text-blue-300 font-mono mt-1 inline-block"
+                        >
+                          {todayLayover.hotel_phone}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {todayLayover.layover_duration && (
+                  <div className={`flex items-center gap-2 text-sm text-zinc-500 ${todayLayover.hotel_name ? "mt-3 pt-3 border-t border-zinc-800" : ""}`}>
+                    <span>Layover: {todayLayover.layover_duration}</span>
+                    {todayLayover.release_time && (
+                      <span className="text-zinc-600">{"\u00B7"} Release: {todayLayover.release_time}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* UPCOMING 1개 */}
           {nextEvent && (
             <div className="space-y-2">
@@ -317,39 +375,6 @@ export default function Dashboard() {
                   {nextEvent.total_credit && <span>Credit: {nextEvent.total_credit}</span>}
                 </div>
               </Link>
-            </div>
-          )}
-
-          {/* LAYOVER */}
-          {todayLayover && (todayLayover.hotel_name || todayLayover.layover_duration) && (
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-zinc-400">LAYOVER</h2>
-              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                {todayLayover.hotel_name && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-lg mt-0.5">{"\uD83C\uDFE8"}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{todayLayover.hotel_name}</p>
-                      {todayLayover.hotel_phone && (
-                        <a
-                          href={`tel:${todayLayover.hotel_phone.replace(/[^\d+]/g, "")}`}
-                          className="text-sm text-blue-400 hover:text-blue-300 font-mono mt-1 inline-block"
-                        >
-                          {todayLayover.hotel_phone}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {todayLayover.layover_duration && (
-                  <div className={`flex items-center gap-2 text-sm text-zinc-500 ${todayLayover.hotel_name ? "mt-3 pt-3 border-t border-zinc-800" : ""}`}>
-                    <span>Layover: {todayLayover.layover_duration}</span>
-                    {todayLayover.release_time && (
-                      <span className="text-zinc-600">{"\u00B7"} Release: {todayLayover.release_time}</span>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -442,8 +467,8 @@ function TripTimeline({ trip, todayStr }: { trip: Pairing; todayStr: string }) {
   for (let i = 0; i < todayLegs.length; i++) {
     const leg = todayLegs[i];
     if (!leg.depart_utc || !leg.arrive_utc || !leg.flight_date) continue;
-    let dep = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
-    let arr = new Date(`${leg.flight_date}T${leg.arrive_utc}:00Z`);
+    let dep = toUtcDate(leg.depart_utc, leg.flight_date);
+    let arr = toUtcDate(leg.arrive_utc, leg.flight_date);
     if (arr <= dep) arr = new Date(arr.getTime() + 86400000);
 
     if (now >= arr) {

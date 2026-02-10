@@ -206,3 +206,36 @@ export async function syncNow() {
 
   return safeJson(res);
 }
+
+export async function fetchFlightTrack({
+  tail_number,
+  flight_number,
+  provider,
+  destination,
+}: {
+  tail_number?: string;
+  flight_number?: string;
+  provider?: string;
+  destination?: string;
+}) {
+  const params = new URLSearchParams();
+  if (tail_number) params.set("tail_number", tail_number);
+  if (flight_number) params.set("flight_number", flight_number);
+  if (provider) params.set("provider", provider);
+  if (destination) params.set("destination", destination);
+
+  const res = await fetch(`${API_BASE}/api/flight/track?${params.toString()}`);
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to fetch flight track");
+  }
+  return safeJson(res);
+}
+
+export async function fetchTrackerStatus() {
+  const res = await fetch(`${API_BASE}/api/flight/status`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch tracker status");
+  }
+  return safeJson(res);
+}

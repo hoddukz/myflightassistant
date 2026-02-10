@@ -65,4 +65,44 @@ export interface ScheduleResponse {
   total_block: string | null;
 }
 
+export interface FlightTrackDeparture {
+  airport: string;
+  scheduled: string | null;
+  estimated: string | null;
+  actual: string | null;
+  delay_minutes: number | null;
+}
+
+export interface FlightTrackArrival {
+  airport: string;
+  scheduled: string | null;
+  estimated: string | null;
+  actual: string | null;
+  delay_minutes: number | null;
+}
+
+export interface FlightTrackLive {
+  latitude: number | null;
+  longitude: number | null;
+  altitude: number | null;
+  speed: number | null;
+  heading?: number | null;
+  vertical_rate?: number | null;
+  on_ground?: boolean;
+  distance_nm?: number | null;
+}
+
+export interface FlightTrackData {
+  available: boolean;
+  reason?: string;
+  provider?: string;
+  flight_number?: string;
+  tail_number?: string;
+  status?: string;
+  departure?: FlightTrackDeparture;
+  arrival?: FlightTrackArrival;
+  live?: FlightTrackLive;
+  fetched_at?: number;
+}
+
 export type ThemeMode = "dark" | "red-light";

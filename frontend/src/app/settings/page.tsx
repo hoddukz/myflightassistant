@@ -9,6 +9,7 @@ import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
 import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow } from "@/lib/api";
+import { toUtcDate } from "@/lib/utils";
 
 type Tab = "settings" | "converter" | "notes";
 
@@ -286,12 +287,8 @@ function NotesTab() {
         for (const leg of d.legs) {
           // UTC 시간이 없으면 레그 판정 불가 → 스킵
           if (!leg.depart_utc || !leg.arrive_utc) continue;
-          const depTime = new Date(`${d.flight_date}T${leg.depart_utc}:00Z`);
-          const arrTime = new Date(`${d.flight_date}T${leg.arrive_utc}:00Z`);
-          // arrive가 depart보다 작으면 자정 넘김 → arrive를 다음날로
-          const arrAdj = arrTime.getTime() < depTime.getTime()
-            ? new Date(arrTime.getTime() + 24 * 60 * 60 * 1000)
-            : arrTime;
+          const depTime = toUtcDate(leg.depart_utc, d.flight_date);
+          const arrAdj = toUtcDate(leg.arrive_utc, d.flight_date);
           const windowStart = new Date(depTime.getTime() - 60 * 60 * 1000);
           if (nowUtc >= windowStart.getTime() && nowUtc <= arrAdj.getTime()) {
             return leg;

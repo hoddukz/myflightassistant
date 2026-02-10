@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # 프로젝트 루트의 .env 로딩
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-from app.routers import schedule, briefing
+from app.routers import schedule, briefing, flight
 
 app = FastAPI(
     title="MFA API",
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(schedule.router, prefix="/api/schedule", tags=["schedule"])
 app.include_router(briefing.router, prefix="/api/briefing", tags=["briefing"])
+app.include_router(flight.router, prefix="/api/flight", tags=["flight"])
 
 
 @app.get("/health")

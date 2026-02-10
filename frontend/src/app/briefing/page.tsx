@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { fetchFullBriefing, fetchAirSigmet } from "@/lib/api";
+import { toUtcDate, utcHHMM } from "@/lib/utils";
 import type { FlightLeg } from "@/types";
 
 const RouteMap = dynamic(
@@ -52,6 +53,8 @@ export default function BriefingPage() {
   const { pairings } = useScheduleStore();
   const [activeTripIndex, setActiveTripIndex] = useState(0);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const lastTripIdRef = useRef<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -109,6 +112,18 @@ export default function BriefingPage() {
 
   const days = trips[activeTripIndex]?.days ?? [];
 
+  // 트립 변경 또는 최초 로드 시 오늘 날짜 Day 탭으로 이동
+  useEffect(() => {
+    if (trips.length > 0 && trips[activeTripIndex]) {
+      const tripId = trips[activeTripIndex].pairingId;
+      if (lastTripIdRef.current !== tripId) {
+        const todayIdx = trips[activeTripIndex].days.findIndex((d) => d.date === todayStr);
+        setActiveDayIndex(todayIdx >= 0 ? todayIdx : 0);
+        lastTripIdRef.current = tripId;
+      }
+    }
+  }, [trips, activeTripIndex, todayStr]);
+
   // 스케줄 없으면 검색 모드
   useEffect(() => {
     if (trips.length === 0) setSearchOpen(true);
@@ -118,15 +133,19 @@ export default function BriefingPage() {
   useEffect(() => {
     if (activeTripIndex >= trips.length && trips.length > 0) {
       setActiveTripIndex(0);
-      setActiveDayIndex(0);
+      const todayIdx = trips[0].days.findIndex((d) => d.date === todayStr);
+      setActiveDayIndex(todayIdx >= 0 ? todayIdx : 0);
     }
-  }, [trips.length, activeTripIndex]);
+  }, [trips.length, activeTripIndex, todayStr]);
 
-  // 트립 변경 시 Day 인덱스 리셋
+  // 트립 변경 시 오늘 날짜 Day로 이동 (없으면 0)
   const handleTripChange = useCallback((idx: number) => {
     setActiveTripIndex(idx);
-    setActiveDayIndex(0);
-  }, []);
+    const tripDays = trips[idx]?.days ?? [];
+    const todayIdx = tripDays.findIndex((d) => d.date === todayStr);
+    setActiveDayIndex(todayIdx >= 0 ? todayIdx : 0);
+    lastTripIdRef.current = trips[idx]?.pairingId ?? null;
+  }, [trips, todayStr]);
 
   // 레그 시간 기반 순환 정렬: 지나간 레그 하단, 다음 레그 상단
   const sortedLegs: SortedLeg[] = useMemo(() => {
@@ -138,16 +157,8 @@ export default function BriefingPage() {
       let passed = false;
       // 도착 시간 기준으로 passed 판정 (비행이 끝나야 DONE)
       const arrStr = leg.arrive_utc;
-      const depStr = leg.depart_utc;
       if (arrStr && leg.flight_date) {
-        let arriveUtc = new Date(`${leg.flight_date}T${arrStr}:00Z`);
-        // 자정 넘김 처리: arrive가 depart보다 이르면 다음날
-        if (depStr) {
-          const departUtc = new Date(`${leg.flight_date}T${depStr}:00Z`);
-          if (arriveUtc < departUtc) {
-            arriveUtc = new Date(arriveUtc.getTime() + 24 * 60 * 60 * 1000);
-          }
-        }
+        const arriveUtc = toUtcDate(arrStr, leg.flight_date);
         passed = nowUtc > arriveUtc;
       }
       return { ...leg, passed };
@@ -487,9 +498,9 @@ function LegBriefingBlock({
               <td className="text-zinc-600 pl-2">block</td>
             </tr>
             <tr className="text-zinc-600">
-              <td className="pr-2">{leg.depart_utc ? `${leg.depart_utc}Z` : ""}</td>
+              <td className="pr-2">{leg.depart_utc ? `${utcHHMM(leg.depart_utc)}Z` : ""}</td>
               <td />
-              <td className="pr-2">{leg.arrive_utc ? `${leg.arrive_utc}Z` : ""}</td>
+              <td className="pr-2">{leg.arrive_utc ? `${utcHHMM(leg.arrive_utc)}Z` : ""}</td>
               <td className="pl-2">{leg.block_time || ""}</td>
             </tr>
           </tbody>
@@ -522,11 +533,7 @@ function LegBriefingBlock({
         label="ARR"
         arrivalEpoch={(() => {
           if (!leg.arrive_utc || !leg.flight_date) return undefined;
-          let arr = new Date(`${leg.flight_date}T${leg.arrive_utc}:00Z`);
-          if (leg.depart_utc) {
-            const dep = new Date(`${leg.flight_date}T${leg.depart_utc}:00Z`);
-            if (arr < dep) arr = new Date(arr.getTime() + 86400000);
-          }
+          const arr = toUtcDate(leg.arrive_utc, leg.flight_date);
           return Math.floor(arr.getTime() / 1000);
         })()}
         sigmetData={sigmetData}

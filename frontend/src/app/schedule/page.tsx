@@ -7,7 +7,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { uploadICS, uploadCSV, getCalendarUrl, syncNow, deleteSchedule } from "@/lib/api";
-import { getEventTypeLabel, getEventTypeColor } from "@/lib/utils";
+import { getEventTypeLabel, getEventTypeColor, utcHHMM } from "@/lib/utils";
 import type { Pairing, ScheduleResponse } from "@/types";
 
 export default function SchedulePage() {
@@ -344,6 +344,16 @@ function PairingCard({
     day: "numeric",
   });
 
+  // 순환: 오늘 이후 첫 날부터 표시, 지나간 날은 뒤로
+  const reorderedDays = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const firstUpcoming = pairing.days.findIndex((d) => d.flight_date >= todayStr);
+    if (firstUpcoming > 0) {
+      return [...pairing.days.slice(firstUpcoming), ...pairing.days.slice(0, firstUpcoming)];
+    }
+    return pairing.days;
+  }, [pairing.days]);
+
   return (
     <div className={`bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden ${passed ? "opacity-40" : ""}`}>
       {/* Header */}
@@ -384,8 +394,10 @@ function PairingCard({
       {/* Expanded Detail */}
       {expanded && pairing.days.length > 0 && (
         <div className="border-t border-zinc-800 px-4 pb-4">
-          {pairing.days.map((day, di) => (
-            <div key={di} className="mt-3">
+          {reorderedDays.map((day, di) => {
+            const dayPassed = day.flight_date < new Date().toISOString().slice(0, 10);
+            return (
+            <div key={di} className={`mt-3 ${dayPassed ? "opacity-40" : ""}`}>
               {/* Day Header */}
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-zinc-400">
@@ -401,7 +413,7 @@ function PairingCard({
                       <span className="text-zinc-500 ml-1">{day.report_tz}</span>
                     )}
                     {day.report_time_utc && (
-                      <span className="text-zinc-500 ml-1">({day.report_time_utc}Z)</span>
+                      <span className="text-zinc-500 ml-1">({utcHHMM(day.report_time_utc)}Z)</span>
                     )}
                   </span>
                 )}
@@ -462,7 +474,7 @@ function PairingCard({
                         <span className="text-zinc-600 text-xs ml-0.5">{leg.depart_tz}</span>
                       )}
                       {leg.depart_utc && (
-                        <span className="text-zinc-600 text-xs ml-0.5">({leg.depart_utc}Z)</span>
+                        <span className="text-zinc-600 text-xs ml-0.5">({utcHHMM(leg.depart_utc)}Z)</span>
                       )}
                     </span>
                     <span className="text-zinc-700">→</span>
@@ -472,7 +484,7 @@ function PairingCard({
                         <span className="text-zinc-600 text-xs ml-0.5">{leg.arrive_tz}</span>
                       )}
                       {leg.arrive_utc && (
-                        <span className="text-zinc-600 text-xs ml-0.5">({leg.arrive_utc}Z)</span>
+                        <span className="text-zinc-600 text-xs ml-0.5">({utcHHMM(leg.arrive_utc)}Z)</span>
                       )}
                     </span>
                   </div>
@@ -534,7 +546,8 @@ function PairingCard({
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
 
           {/* Trip Summary */}
           {pairing.tafb && (
