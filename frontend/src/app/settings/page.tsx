@@ -586,12 +586,19 @@ function NotificationsSection() {
         return;
       }
 
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || await getVapidKey();
+      const vapidKeyStr = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || await getVapidKey();
+
+      // Safari/iOS requires Uint8Array for applicationServerKey
+      const padding = "=".repeat((4 - (vapidKeyStr.length % 4)) % 4);
+      const base64 = (vapidKeyStr + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      const vapidKeyBytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) vapidKeyBytes[i] = raw.charCodeAt(i);
 
       const reg = await navigator.serviceWorker.ready;
       const subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: vapidKey,
+        applicationServerKey: vapidKeyBytes,
       });
 
       await subscribePush(subscription.toJSON());
