@@ -24,7 +24,7 @@ const calendarTheme = {
   pastDaySat: "text-blue-800",
   cellHover: "hover:bg-zinc-800",
   dotTrip: "bg-blue-500",
-  dotOff: "bg-emerald-500",
+  dotOff: "bg-amber-500",
   focusRing: "ring-1 ring-blue-500 rounded-lg p-2 -mx-2 transition-all",
 };
 

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useSettingsStore, type Theme } from "@/stores/settingsStore";
 import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow, uploadICS, uploadCSV, deleteSchedule } from "@/lib/api";
 import type { ScheduleResponse } from "@/types";
 import { toUtcDate } from "@/lib/utils";
@@ -551,6 +552,39 @@ function UtilitiesView() {
   );
 }
 
+/* ── Theme Toggle ── */
+const themeOptions: { value: Theme; label: string }[] = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+];
+
+function ThemeToggle() {
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+
+  return (
+    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+      <p className="text-sm font-medium">Theme</p>
+      <p className="text-xs text-zinc-500 mt-1 mb-3">Switch between dark and light mode</p>
+      <div className="flex gap-2">
+        {themeOptions.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setTheme(opt.value)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              theme === opt.value
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── Sub-view Header ── */
 function SubViewHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
@@ -610,15 +644,12 @@ export default function SettingsPage() {
               </button>
 
               {/* Theme */}
-              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                <p className="text-sm font-medium">Theme</p>
-                <p className="text-xs text-zinc-500 mt-1">Cockpit Mode (Dark)</p>
-              </div>
+              <ThemeToggle />
 
               {/* Version */}
               <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
                 <p className="text-sm font-medium">Version</p>
-                <p className="text-xs text-zinc-500 mt-1">MFA v0.1.0</p>
+                <p className="text-xs text-zinc-500 mt-1">MFA v1.0.0</p>
               </div>
             </div>
           </>

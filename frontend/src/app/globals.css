@@ -18,9 +18,65 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Red-Light Mode for Night Vision */
-.red-light body,
-.red-light {
-  --background: #0a0000;
-  --foreground: #ff4444;
+/* Light Mode */
+.light body,
+.light {
+  --background: #eeeef0;
+  --foreground: #18181b;
+
+  /* Zinc → Light neutrals */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f5;
+  --color-zinc-200: #e4e4e7;
+  --color-zinc-300: #52525b;
+  --color-zinc-400: #71717a;
+  --color-zinc-500: #52525b;
+  --color-zinc-600: #3f3f46;
+  --color-zinc-700: #c4c4c9;
+  --color-zinc-800: #b4b4bb;
+  --color-zinc-900: #ffffff;
+  --color-zinc-950: #eeeef0;
+
+  /* Blue */
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #1d56d8;
+  --color-blue-500: #1844c0;
+  --color-blue-600: #1e40af;
+  --color-blue-800: #dbeafe;
+  --color-blue-900: #eff6ff;
+
+  /* Amber */
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #d97706;
+  --color-amber-500: #b45309;
+  --color-amber-600: #92400e;
+
+  /* Emerald/Green */
+  --color-emerald-400: #047d55;
+  --color-emerald-500: #046a48;
+  --color-emerald-600: #065f46;
+  --color-emerald-700: #064e3b;
+  --color-green-400: #16a34a;
+  --color-green-500: #15803d;
+  --color-green-800: #dcfce7;
+  --color-green-900: #f0fdf4;
+
+  /* Red */
+  --color-red-300: #fca5a5;
+  --color-red-400: #c72020;
+  --color-red-500: #a51818;
+  --color-red-600: #991b1b;
+  --color-red-800: #fee2e2;
+  --color-red-900: #fef2f2;
+
+  /* Purple */
+  --color-purple-300: #c084fc;
+  --color-purple-400: #7e28d4;
+  --color-purple-600: #7e22ce;
+
+  /* Cyan */
+  --color-cyan-600: #0891b2;
+
+  /* White stays white (used on colored backgrounds like buttons) */
+  --color-white: #ffffff;
 }

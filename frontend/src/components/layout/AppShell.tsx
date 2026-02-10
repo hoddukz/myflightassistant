@@ -3,16 +3,33 @@
 
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import AuthGuard from "@/components/auth/AuthGuard";
 import DualTimeBar from "@/components/layout/DualTimeBar";
 import BottomNav from "@/components/layout/BottomNav";
+import DisclaimerOverlay from "@/components/layout/DisclaimerOverlay";
+import { useSettingsStore } from "@/stores/settingsStore";
+
+const DISCLAIMER_ENABLED = process.env.NEXT_PUBLIC_DISCLAIMER_ENABLED === "true";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const theme = useSettingsStore((s) => s.theme);
+  const disclaimerAccepted = useSettingsStore((s) => s.disclaimerAccepted);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.remove("dark", "light");
+    html.classList.add(theme);
+  }, [theme]);
 
   if (pathname === "/login") {
     return <>{children}</>;
+  }
+
+  if (DISCLAIMER_ENABLED && !disclaimerAccepted) {
+    return <DisclaimerOverlay />;
   }
 
   return (

@@ -146,12 +146,12 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         {/* Header */}
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-white">MFA</h1>
+          <h1 className="text-2xl font-bold text-foreground">MFA</h1>
           <p className="text-sm text-zinc-500">My Flight Assistant</p>
         </div>
 
         {/* Mode Title */}
-        <h2 className="text-lg font-semibold text-white text-center">
+        <h2 className="text-lg font-semibold text-foreground text-center">
           {title}
         </h2>
 
@@ -180,7 +180,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-blue-600 transition-colors"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-600 outline-none focus:border-blue-600 transition-colors"
               />
             )}
             {mode !== "reset" && (
@@ -196,7 +196,7 @@ export default function LoginPage() {
                 autoComplete={
                   mode === "signin" ? "current-password" : "new-password"
                 }
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-blue-600 transition-colors"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-600 outline-none focus:border-blue-600 transition-colors"
               />
             )}
             {(mode === "signup" || mode === "update-password") && (
@@ -208,7 +208,7 @@ export default function LoginPage() {
                 required
                 minLength={6}
                 autoComplete="new-password"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-blue-600 transition-colors"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-600 outline-none focus:border-blue-600 transition-colors"
               />
             )}
           </div>
