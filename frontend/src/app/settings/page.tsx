@@ -8,27 +8,11 @@ import { useRouter } from "next/navigation";
 import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
-import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow } from "@/lib/api";
+import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow, uploadICS, uploadCSV, deleteSchedule } from "@/lib/api";
+import type { ScheduleResponse } from "@/types";
 import { toUtcDate } from "@/lib/utils";
 
-type Tab = "settings" | "converter" | "notes";
-
-/* ── Settings Tab ── */
-function SettingsTab() {
-  return (
-    <div className="space-y-3">
-      <CalendarSyncSection />
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Theme</p>
-        <p className="text-xs text-zinc-500 mt-2">Cockpit Mode (Dark)</p>
-      </div>
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Version</p>
-        <p className="text-xs text-zinc-500 mt-2">MFA v0.1.0</p>
-      </div>
-    </div>
-  );
-}
+type SettingsView = "main" | "schedule" | "utilities";
 
 /* ── Calendar Sync Section ── */
 function CalendarSyncSection() {
@@ -187,6 +171,167 @@ function CalendarSyncSection() {
       )}
       {success && (
         <p className="text-xs text-green-400">{success}</p>
+      )}
+    </div>
+  );
+}
+
+/* ── Schedule Management Tab ── */
+function ScheduleManageTab() {
+  const { pairings, setPairings, clearSchedule, fetchSchedule } = useScheduleStore();
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setError(null);
+      setUploading(true);
+      try {
+        if (file.name.endsWith(".ics")) {
+          const data: ScheduleResponse = await uploadICS(file);
+          setPairings(data);
+        } else if (file.name.endsWith(".csv")) {
+          await uploadCSV(file);
+          await fetchSchedule();
+        } else {
+          throw new Error("Unsupported file type. Use .ics or .csv");
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [setPairings, fetchSchedule]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* Upload Area */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+          dragOver
+            ? "border-blue-400 bg-blue-400/10"
+            : "border-zinc-700 hover:border-zinc-500"
+        }`}
+      >
+        <input
+          type="file"
+          accept=".ics,.csv"
+          onChange={handleInputChange}
+          className="hidden"
+          id="schedule-upload"
+          disabled={uploading}
+        />
+        <label
+          htmlFor="schedule-upload"
+          className="cursor-pointer flex flex-col items-center gap-3"
+        >
+          <span className="text-3xl">{uploading ? "..." : "\u{1F4E4}"}</span>
+          <span className="text-sm text-zinc-400">
+            {uploading
+              ? "Parsing schedule..."
+              : "Drop .ics or .csv file here, or tap to browse"}
+          </span>
+        </label>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      {/* Divider */}
+      <div className="flex items-center gap-2 pt-1">
+        <div className="h-px flex-1 bg-zinc-800" />
+        <span className="text-xs text-zinc-600">OR</span>
+        <div className="h-px flex-1 bg-zinc-800" />
+      </div>
+
+      {/* Calendar Sync */}
+      <CalendarSyncSection />
+
+      {/* Schedule Info */}
+      {pairings.length > 0 && (
+        <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">{pairings.length} events loaded</p>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="text-xs text-red-400 hover:text-red-300 border border-red-400/30 px-3 py-1.5 rounded-lg"
+            >
+              Clear Schedule
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Confirm Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-base font-semibold text-white">Clear Schedule</h3>
+            <p className="text-sm text-zinc-400 mt-2">
+              Are you sure you want to clear your schedule? This cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearing}
+                className="px-4 py-2 text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setClearing(true);
+                  try {
+                    await deleteSchedule();
+                    clearSchedule();
+                    setShowClearConfirm(false);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Failed to clear schedule");
+                    setShowClearConfirm(false);
+                  } finally {
+                    setClearing(false);
+                  }
+                }}
+                disabled={clearing}
+                className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:text-red-300 rounded-lg transition-colors font-medium"
+              >
+                {clearing ? "Clearing..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -379,48 +524,123 @@ function NotesTab() {
   );
 }
 
+/* ── Utilities View (Converter + Notes) ── */
+function UtilitiesView() {
+  const [activeTab, setActiveTab] = useState<"converter" | "notes">("converter");
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1 bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        {(["converter", "notes"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === t
+                ? "bg-zinc-700 text-white"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            {t === "converter" ? "Converter" : "Notes"}
+          </button>
+        ))}
+      </div>
+      {activeTab === "converter" && <ConverterTab />}
+      {activeTab === "notes" && <NotesTab />}
+    </div>
+  );
+}
+
+/* ── Sub-view Header ── */
+function SubViewHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="pt-2 flex items-center gap-3">
+      <button
+        onClick={onBack}
+        className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <h1 className="text-xl font-bold">{title}</h1>
+    </div>
+  );
+}
+
 /* ── Main Page ── */
 export default function SettingsPage() {
   const router = useRouter();
   const signOut = useAuthStore((s) => s.signOut);
   const user = useAuthStore((s) => s.user);
-  const [tab, setTab] = useState<Tab>("settings");
-
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "settings", label: "Settings" },
-    { key: "converter", label: "Converter" },
-    { key: "notes", label: "Notes" },
-  ];
+  const [view, setView] = useState<SettingsView>("main");
 
   return (
-    <div className="space-y-4">
-      <div className="pt-2">
-        <h1 className="text-xl font-bold">Settings</h1>
+    <div className="flex flex-col min-h-[calc(100dvh-5rem)]">
+      <div className="flex-1 space-y-4">
+        {view === "main" && (
+          <>
+            <div className="pt-2">
+              <h1 className="text-xl font-bold">Settings</h1>
+            </div>
+
+            <div className="space-y-2">
+              {/* Schedule Management */}
+              <button
+                onClick={() => setView("schedule")}
+                className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-800 flex items-center justify-between active:bg-zinc-800 transition-colors"
+              >
+                <div className="text-left">
+                  <p className="text-sm font-medium">Schedule Management</p>
+                  <p className="text-xs text-zinc-500 mt-1">Upload, sync, and manage schedule</p>
+                </div>
+                <span className="text-zinc-600 text-sm">{"\u203A"}</span>
+              </button>
+
+              {/* Utilities */}
+              <button
+                onClick={() => setView("utilities")}
+                className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-800 flex items-center justify-between active:bg-zinc-800 transition-colors"
+              >
+                <div className="text-left">
+                  <p className="text-sm font-medium">Utilities</p>
+                  <p className="text-xs text-zinc-500 mt-1">Unit converter, flight notes</p>
+                </div>
+                <span className="text-zinc-600 text-sm">{"\u203A"}</span>
+              </button>
+
+              {/* Theme */}
+              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+                <p className="text-sm font-medium">Theme</p>
+                <p className="text-xs text-zinc-500 mt-1">Cockpit Mode (Dark)</p>
+              </div>
+
+              {/* Version */}
+              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+                <p className="text-sm font-medium">Version</p>
+                <p className="text-xs text-zinc-500 mt-1">MFA v0.1.0</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {view === "schedule" && (
+          <>
+            <SubViewHeader title="Schedule" onBack={() => setView("main")} />
+            <ScheduleManageTab />
+          </>
+        )}
+
+        {view === "utilities" && (
+          <>
+            <SubViewHeader title="Utilities" onBack={() => setView("main")} />
+            <UtilitiesView />
+          </>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-zinc-900 rounded-xl p-1 border border-zinc-800">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.key
-                ? "bg-zinc-700 text-white"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "settings" && <SettingsTab />}
-      {tab === "converter" && <ConverterTab />}
-      {tab === "notes" && <NotesTab />}
-
-      {/* Account */}
-      <div className="pt-4 space-y-3">
+      {/* Account - always at bottom */}
+      <div className="pt-4 pb-2 space-y-3">
         {user && (
           <p className="text-xs text-zinc-600 text-center">{user.email}</p>
         )}

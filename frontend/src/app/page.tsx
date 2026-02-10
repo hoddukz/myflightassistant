@@ -167,10 +167,10 @@ export default function Dashboard() {
           <div className="text-4xl">{"\u2708"}</div>
           <p className="text-zinc-400">No schedule loaded</p>
           <Link
-            href="/schedule"
+            href="/settings"
             className="inline-block bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            Upload Schedule
+            Go to Settings → Schedule
           </Link>
         </div>
       ) : (
@@ -200,22 +200,28 @@ export default function Dashboard() {
               }).length;
               const monthStart = new Date(`${monthStr}-01T00:00:00Z`);
               const monthEndDate = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-              const monthEndStr = monthEndDate.toISOString().slice(0, 10);
-              let totalOffDays = 0;
-              let doneOffDays = 0;
-              pairings.filter((p) => p.event_type === "njm").forEach((p) => {
-                const s = new Date(p.start_utc);
-                const e = new Date(p.end_utc);
-                const rangeStart = s < monthStart ? monthStart : s;
-                const rangeEnd = e > new Date(`${monthEndStr}T23:59:59Z`) ? new Date(`${monthEndStr}T23:59:59Z`) : e;
-                if (rangeStart > rangeEnd) return;
-                const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
-                totalOffDays += days;
-                const doneEnd = now < rangeEnd ? now : rangeEnd;
-                if (doneEnd > rangeStart) {
-                  doneOffDays += Math.ceil((doneEnd.getTime() - rangeStart.getTime()) / 86400000);
+              const daysInMonth = monthEndDate.getDate();
+              // Off Days: 근무 이벤트(pairing/mov/training)가 없는 날 = 오프
+              const busyDates = new Set<string>();
+              pairings.forEach((p) => {
+                if (p.event_type !== "pairing" && p.event_type !== "mov" && p.event_type !== "training") return;
+                const cur = new Date(p.start_utc.slice(0, 10) + "T00:00:00Z");
+                const end = new Date(p.end_utc.slice(0, 10) + "T00:00:00Z");
+                while (cur <= end) {
+                  const ds = cur.toISOString().slice(0, 10);
+                  if (ds.startsWith(monthStr)) busyDates.add(ds);
+                  cur.setUTCDate(cur.getUTCDate() + 1);
                 }
               });
+              let totalOffDays = 0;
+              let doneOffDays = 0;
+              for (let d = 1; d <= daysInMonth; d++) {
+                const ds = `${monthStr}-${String(d).padStart(2, "0")}`;
+                if (!busyDates.has(ds)) {
+                  totalOffDays++;
+                  if (new Date(`${ds}T23:59:59Z`) < now) doneOffDays++;
+                }
+              }
               return (
                 <>
                   <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800">

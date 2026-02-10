@@ -655,9 +655,31 @@ function AirportBriefingCard({
               {category}
             </span>
           </div>
-          <span className="text-zinc-500 text-sm">
-            {expanded ? "\u25B2" : "\u25BC"}
-          </span>
+          <div className="flex items-center gap-1">
+            {!expanded && sigmetData?.sigmets?.length > 0 && (
+              <span className="text-[10px] font-bold bg-red-500 text-white px-1 py-0.5 rounded leading-none">
+                SIG
+              </span>
+            )}
+            {!expanded && sigmetData?.airmets?.length > 0 && (
+              <span className="text-[10px] font-bold bg-amber-500 text-white px-1 py-0.5 rounded leading-none">
+                AIR
+              </span>
+            )}
+            {!expanded && briefing.notam_critical_count > 0 && (
+              <span className="text-[10px] font-bold bg-red-600 text-white px-1 py-0.5 rounded leading-none">
+                !{briefing.notam_critical_count}
+              </span>
+            )}
+            {!expanded && metar?.weather && (
+              <span className="text-[10px] font-bold bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded leading-none">
+                {metar.weather}
+              </span>
+            )}
+            <span className="text-zinc-500 text-sm">
+              {expanded ? "\u25B2" : "\u25BC"}
+            </span>
+          </div>
         </div>
         {metar && (
           <div className="grid grid-cols-4 gap-2 mt-2 text-center">

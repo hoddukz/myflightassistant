@@ -3,53 +3,20 @@
 
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { uploadICS, uploadCSV, getCalendarUrl, syncNow, deleteSchedule } from "@/lib/api";
 import { getEventTypeLabel, getEventTypeColor, utcHHMM } from "@/lib/utils";
-import type { Pairing, ScheduleResponse } from "@/types";
+import type { Pairing } from "@/types";
 
 export default function SchedulePage() {
-  const router = useRouter();
-  const { pairings, setPairings, clearSchedule, fetchSchedule } = useScheduleStore();
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { pairings, fetchSchedule } = useScheduleStore();
   const [expandedPairing, setExpandedPairing] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [calendarConnected, setCalendarConnected] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [clearing, setClearing] = useState(false);
 
-  // 페이지 마운트 시 DB에서 스케줄 로드 + 캘린더 연동 상태 확인
+  // 페이지 마운트 시 DB에서 스케줄 로드
   useEffect(() => {
     fetchSchedule();
-    getCalendarUrl()
-      .then((data) => {
-        if (data && data.ics_url) {
-          setCalendarConnected(true);
-          setLastSynced(data.last_synced_at);
-        }
-      })
-      .catch(() => {});
   }, []);
-
-  const handleSyncNow = async () => {
-    setSyncing(true);
-    setError(null);
-    try {
-      const data = await syncNow();
-      setPairings(data);
-      const updated = await getCalendarUrl();
-      if (updated) setLastSynced(updated.last_synced_at);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync failed");
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // 월 네비게이터 상태
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -96,140 +63,30 @@ export default function SchedulePage() {
     return filtered;
   }, [pairings, selectedMonth, now]);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      setError(null);
-      setUploading(true);
-      try {
-        let data: ScheduleResponse;
-        if (file.name.endsWith(".ics")) {
-          data = await uploadICS(file);
-        } else if (file.name.endsWith(".csv")) {
-          // CSV는 별도 처리 (보조 데이터)
-          await uploadCSV(file);
-          setUploading(false);
-          return;
-        } else {
-          throw new Error("Unsupported file type. Use .ics or .csv");
-        }
-        setPairings(data);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Upload failed");
-      } finally {
-        setUploading(false);
-      }
-    },
-    [setPairings]
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
-
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
-
   return (
     <div className="space-y-6">
-      <div className="pt-2 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Schedule</h1>
-          <p className="text-zinc-500 text-sm mt-1">
-            {pairings.length > 0
-              ? `${pairings.length} events loaded`
-              : "Upload your schedule"}
-          </p>
-        </div>
-        {pairings.length > 0 && (
-          <button
-            onClick={() => setShowClearConfirm(true)}
-            className="text-xs text-red-400 hover:text-red-300 border border-red-400/30 px-3 py-1.5 rounded-lg"
-          >
-            Clear
-          </button>
-        )}
+      <div className="pt-2">
+        <h1 className="text-xl font-bold">Schedule</h1>
+        <p className="text-zinc-500 text-sm mt-1">
+          {pairings.length > 0
+            ? `${pairings.length} events loaded`
+            : "No schedule loaded"}
+        </p>
       </div>
 
-      {/* Upload Area / Calendar Connected */}
-      {calendarConnected ? (
-        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 text-center space-y-3">
-          <div className="flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-sm text-zinc-300 font-medium">Google Calendar Connected</span>
-          </div>
-          {lastSynced && (
-            <p className="text-xs text-zinc-500">
-              Last sync: {new Date(lastSynced).toLocaleString("en-US", {
-                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
-              })}
-            </p>
-          )}
-          <div className="flex gap-2 justify-center">
-            <button
-              onClick={handleSyncNow}
-              disabled={syncing}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
-            >
-              {syncing ? "Syncing..." : "Sync Now"}
-            </button>
-            <button
-              onClick={() => router.push("/settings")}
-              className="px-4 py-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
-            >
-              Settings
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-            dragOver
-              ? "border-blue-400 bg-blue-400/10"
-              : "border-zinc-700 hover:border-zinc-500"
-          }`}
-        >
-          <input
-            type="file"
-            accept=".ics,.csv"
-            onChange={handleInputChange}
-            className="hidden"
-            id="file-upload"
-            disabled={uploading}
-          />
-          <label
-            htmlFor="file-upload"
-            className="cursor-pointer flex flex-col items-center gap-3"
+      {/* Empty State: Settings 안내 */}
+      {pairings.length === 0 && (
+        <div className="text-center py-12 space-y-4">
+          <div className="text-4xl">{"\u{1F4C5}"}</div>
+          <p className="text-zinc-400 text-sm">
+            No schedule loaded.
+          </p>
+          <Link
+            href="/settings"
+            className="inline-block bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            <span className="text-3xl">{uploading ? "..." : "\u{1F4E4}"}</span>
-            <span className="text-sm text-zinc-400">
-              {uploading
-                ? "Parsing schedule..."
-                : "Drop .ics or .csv file here, or tap to browse"}
-            </span>
-          </label>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 text-sm text-red-300">
-          {error}
+            Go to Settings → Schedule
+          </Link>
         </div>
       )}
 
@@ -281,45 +138,6 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Clear Confirm Modal */}
-      {showClearConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 className="text-base font-semibold text-white">Clear Schedule</h3>
-            <p className="text-sm text-zinc-400 mt-2">
-              Are you sure you want to clear your schedule? This cannot be undone.
-            </p>
-            <div className="flex gap-3 mt-6 justify-end">
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                disabled={clearing}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  setClearing(true);
-                  try {
-                    await deleteSchedule();
-                    clearSchedule();
-                    setShowClearConfirm(false);
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "Failed to clear schedule");
-                    setShowClearConfirm(false);
-                  } finally {
-                    setClearing(false);
-                  }
-                }}
-                disabled={clearing}
-                className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:text-red-300 rounded-lg transition-colors font-medium"
-              >
-                {clearing ? "Clearing..." : "Confirm"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
