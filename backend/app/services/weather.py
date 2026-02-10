@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -104,7 +105,7 @@ async def fetch_airsigmet(
     min_lon: float = -125.0,
     max_lon: float = -66.0,
 ) -> list[dict]:
-    """SIGMET/AIRMET 데이터를 조회한다."""
+    """SIGMET/AIRMET 데이터를 조회하고 바운딩 박스로 필터링한다."""
     cache_key = f"airsigmet:{min_lat}:{max_lat}:{min_lon}:{max_lon}"
     cached = _get_cached(cache_key)
     if cached is not None:
@@ -124,8 +125,96 @@ async def fetch_airsigmet(
     if not isinstance(data, list):
         return []
 
-    _set_cache(cache_key, data)
-    return data
+    parsed = []
+    for item in data:
+        coords = item.get("coords", [])
+        if not _is_in_bounds(coords, min_lat, max_lat, min_lon, max_lon):
+            continue
+        parsed.append(_parse_airsigmet(item))
+
+    _set_cache(cache_key, parsed)
+    return parsed
+
+
+_SEVERITY_MAP: dict[int, str] = {
+    1: "LGT",
+    2: "LGT",
+    3: "MOD",
+    4: "MOD",
+    5: "SEV",
+    6: "SEV",
+    7: "EXTREME",
+    8: "EXTREME",
+}
+
+
+def _parse_airsigmet(raw: dict) -> dict:
+    """AWC JSON SIGMET/AIRMET을 정규화한다."""
+    severity_num = raw.get("severity")
+    severity = _SEVERITY_MAP.get(severity_num, "") if severity_num is not None else ""
+
+    valid_from = raw.get("validTimeFrom")
+    valid_to = raw.get("validTimeTo")
+    if isinstance(valid_from, (int, float)):
+        valid_from = datetime.fromtimestamp(valid_from, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    if isinstance(valid_to, (int, float)):
+        valid_to = datetime.fromtimestamp(valid_to, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+    alt_low = raw.get("altitudeLow1")
+    alt_hi = raw.get("altitudeHi1") or raw.get("altitudeHi2")
+    altitude_low = _format_altitude(alt_low)
+    altitude_high = _format_altitude(alt_hi)
+
+    movement_dir = raw.get("movementDir")
+    movement_spd = raw.get("movementSpd")
+    movement = None
+    if movement_dir is not None:
+        movement = f"{movement_dir}\u00B0"
+        if movement_spd is not None:
+            movement += f" at {movement_spd}kt"
+
+    return {
+        "type": raw.get("airSigmetType", ""),
+        "hazard": raw.get("hazard", ""),
+        "severity": severity,
+        "altitude_low": altitude_low,
+        "altitude_high": altitude_high,
+        "valid_from": valid_from,
+        "valid_to": valid_to,
+        "raw": raw.get("rawAirSigmet", ""),
+        "coords": raw.get("coords", []),
+        "movement": movement,
+    }
+
+
+def _format_altitude(val) -> str:
+    """고도 값을 FL 또는 ft 문자열로 변환한다."""
+    if val is None:
+        return ""
+    val = int(val)
+    if val >= 18000:
+        return f"FL{val // 100}"
+    return f"{val}ft"
+
+
+def _is_in_bounds(
+    coords: list[dict],
+    min_lat: float,
+    max_lat: float,
+    min_lon: float,
+    max_lon: float,
+) -> bool:
+    """SIGMET/AIRMET 폴리곤이 바운딩 박스와 겹치는지 확인한다."""
+    if not coords:
+        return False
+    for c in coords:
+        lat = c.get("lat")
+        lon = c.get("lon")
+        if lat is None or lon is None:
+            continue
+        if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+            return True
+    return False
 
 
 def _resolve_icao(station: str) -> str | None:

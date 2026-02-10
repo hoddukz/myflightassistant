@@ -7,45 +7,7 @@
 
 ## 긴급 오류/수정사항
 
-### Vercel 배포 — Schedule 페이지 JSON 파싱 에러
-- **증상**: `Failed to execute 'json' on 'Response': Unexpected end of JSON input`
-- **현재 상태**: 환경변수 `\n` 문제 해결 완료 (Supabase 클라이언트 정상 초기화 확인). 하지만 Schedule 페이지에서 여전히 빈 응답 JSON 파싱 에러 발생.
-- **디버그 엔드포인트 아직 남아있음**: `backend/app/main.py`에 `/api/debug/env`, `/api/debug/auth` + `backend/app/dependencies/auth.py`에 상세 에러 메시지 — 해결 후 반드시 제거할 것
-
-#### 예상 원인 및 확인 방법
-
-1. **Vercel 서버리스 함수 타임아웃/크래시**
-   - Vercel Hobby 플랜은 서버리스 함수 10초 타임아웃
-   - DB 조회가 느리거나 cold start로 인해 빈 응답 반환 가능
-   - **확인**: `vercel logs` 또는 Vercel 대시보드 → Functions → 에러 로그 확인
-   - **해결**: 함수 크래시 원인 파악 후 수정
-
-2. **`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` 빌드 타임 미주입**
-   - Next.js `NEXT_PUBLIC_*` 변수는 빌드 시점에 bake됨
-   - Vercel env var 등록 후 재배포했지만, Next.js 빌드에서 실제로 주입됐는지 확인 필요
-   - **확인**: 배포된 사이트에서 브라우저 콘솔: `document.querySelector('script').textContent` 등으로 Supabase URL 포함 여부 확인, 또는 브라우저 Network 탭에서 Supabase 요청 URL 확인
-   - **해결**: 미주입 시 `frontend/.env.production`에 직접 추가하거나, Vercel 빌드 캐시 클리어 후 재배포
-
-3. **`getCalendarUrl()` → FastAPI `return None` → 빈 응답 가능성**
-   - FastAPI가 `None` 반환 시 `200 + null` 이지만, Vercel Python 런타임에서 다르게 처리될 수 있음
-   - **확인**: `curl -H "Authorization: Bearer <token>" https://mfa-seven.vercel.app/api/schedule/calendar-url` 로 인증된 상태에서 실제 응답 바디 확인
-   - **해결**: `return None` 대신 `return JSONResponse(content=None)` 또는 빈 객체 반환으로 변경
-
-4. **프론트엔드 `!res.ok` 분기에서 에러 응답도 빈 바디일 때**
-   - `uploadICS`, `deleteSchedule` 등에서 `!res.ok` 시 `await res.json()` 호출하는데, 에러 응답 바디가 비어있으면 동일 에러 발생
-   - **해결**: `res.json()` 호출을 try/catch로 감싸기
-
-#### 즉시 조치 가능한 해결방안
-```typescript
-// api.ts — res.json() 안전하게 처리
-async function safeJson(res: Response) {
-  const text = await res.text();
-  if (!text) return null;
-  return JSON.parse(text);
-}
-```
-- 모든 API 함수에서 `res.json()` 대신 `safeJson(res)` 사용
-- 이 방법으로 빈 응답에서도 크래시 방지 가능
+- (없음)
 
 ---
 
@@ -117,7 +79,10 @@ async function safeJson(res: Response) {
 - Vercel 환경변수 8개 등록 (printf로 개행문자 없이)
 - CORS 에러 수정: vercel.json에 OPTIONS 204 라우트 추가
 - 환경변수 `\n` 문제 해결: Supabase `AuthRetryableError` → 환경변수 재등록
-- **잔여 이슈**: Schedule 페이지 JSON 파싱 에러 (상단 긴급사항 참조)
+- **해결 완료**: NEXT_PUBLIC_* 환경변수 `n\n` 오염 → `--non-interactive`로 재등록
+- safeJson() 래퍼 적용 (빈 응답 방어)
+- calendar-url `return None` → 명시적 빈 객체 반환
+- 디버그 엔드포인트/메시지 제거
 
 #### Schedule Clear 버튼 — DB 삭제 + 확인 다이얼로그
 - `backend/app/services/schedule_db.py`: `delete_schedule()` 함수 추가
@@ -206,6 +171,9 @@ async function safeJson(res: Response) {
 
 ## 완료된 항목 (최신순)
 
+- [x] Vercel NEXT_PUBLIC_* 환경변수 `n\n` 오염 수정 (2026-02-10)
+- [x] api.ts safeJson() 래퍼 + calendar-url 빈 응답 수정 (2026-02-10)
+- [x] 디버그 엔드포인트/메시지 제거 (2026-02-10)
 - [x] Settings 불필요한 토글 제거 (2026-02-08)
 - [x] Schedule Clear 버튼 DB 삭제 + 커스텀 확인 모달 (2026-02-08)
 - [x] Vercel 환경변수 `\n` 문제 해결 — printf로 재등록 (2026-02-08)

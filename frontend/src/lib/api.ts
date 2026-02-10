@@ -113,6 +113,16 @@ export async function fetchFullBriefing(station: string) {
   return safeJson(res);
 }
 
+export async function fetchAirSigmet(origin: string, destination: string) {
+  const res = await fetch(
+    `${API_BASE}/api/briefing/airsigmet?origin=${origin}&destination=${destination}`
+  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch SIGMET/AIRMET data");
+  }
+  return safeJson(res);
+}
+
 export async function fetchRouteBriefing(origin: string, destination: string) {
   const res = await fetch(
     `${API_BASE}/api/briefing/route?origin=${origin}&destination=${destination}`

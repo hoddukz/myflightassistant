@@ -4,9 +4,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { fetchFullBriefing } from "@/lib/api";
+import { fetchFullBriefing, fetchAirSigmet } from "@/lib/api";
 import type { FlightLeg } from "@/types";
+
+const RouteMap = dynamic(
+  () => import("@/components/briefing/RouteMap"),
+  { ssr: false }
+);
 
 const CATEGORY_COLORS: Record<string, string> = {
   VFR: "text-emerald-400 border-emerald-400",
@@ -240,7 +246,7 @@ export default function BriefingPage() {
       <div className="pt-2 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Briefing</h1>
-          <p className="text-zinc-500 text-sm mt-1">METAR / TAF / NOTAM</p>
+          <p className="text-zinc-500 text-sm mt-1">METAR / TAF / NOTAM / SIGMET</p>
         </div>
         <button
           onClick={() => setSearchOpen(!searchOpen)}
@@ -419,6 +425,20 @@ function LegBriefingBlock({
   const cardKeyOrigin = `${leg.leg_number}-${leg.origin}`;
   const cardKeyDest = `${leg.leg_number}-${leg.destination}`;
 
+  const [sigmetData, setSigmetData] = useState<any>(null);
+  const [sigmetLoading, setSigmetLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSigmetLoading(true);
+    setSigmetData(null);
+    fetchAirSigmet(leg.origin, leg.destination)
+      .then((data) => { if (!cancelled) setSigmetData(data); })
+      .catch(() => { if (!cancelled) setSigmetData(null); })
+      .finally(() => { if (!cancelled) setSigmetLoading(false); });
+    return () => { cancelled = true; };
+  }, [leg.origin, leg.destination]);
+
   return (
     <div className={`space-y-2 ${leg.passed ? "opacity-40" : ""}`}>
       {/* 레그 헤더 */}
@@ -486,6 +506,8 @@ function LegBriefingBlock({
         onToggle={() => onToggleCard(cardKeyOrigin)}
         onRetry={() => onRetry(leg.origin)}
         label="DEP"
+        sigmetData={sigmetData}
+        sigmetLoading={sigmetLoading}
       />
 
       {/* 도착 공항 브리핑 */}
@@ -507,6 +529,8 @@ function LegBriefingBlock({
           }
           return Math.floor(arr.getTime() / 1000);
         })()}
+        sigmetData={sigmetData}
+        sigmetLoading={sigmetLoading}
       />
     </div>
   );
@@ -524,6 +548,8 @@ function AirportBriefingCard({
   onRetry,
   label,
   arrivalEpoch,
+  sigmetData,
+  sigmetLoading,
 }: {
   station: string;
   briefing: any;
@@ -534,8 +560,10 @@ function AirportBriefingCard({
   onRetry?: () => void;
   label?: string;
   arrivalEpoch?: number;
+  sigmetData?: any;
+  sigmetLoading?: boolean;
 }) {
-  const [detailTab, setDetailTab] = useState<"metar" | "taf" | "notam">(
+  const [detailTab, setDetailTab] = useState<"metar" | "taf" | "notam" | "sigmet">(
     "metar"
   );
 
@@ -662,29 +690,43 @@ function AirportBriefingCard({
       {/* 펼침 상세 */}
       {expanded && (
         <div className="border-t border-zinc-800/50 px-3 pb-3">
-          {/* METAR / TAF / NOTAM 탭 */}
+          {/* METAR / TAF / NOTAM / SIGMET 탭 */}
           <div className="flex gap-1 bg-zinc-900/50 rounded-lg p-1 mt-3">
-            {(["metar", "taf", "notam"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDetailTab(tab);
-                }}
-                className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  detailTab === tab
-                    ? "bg-zinc-700 text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                {tab.toUpperCase()}
-                {tab === "notam" && briefing.notam_critical_count > 0 && (
-                  <span className="ml-1 bg-red-500 text-white text-xs px-1 rounded-full">
-                    {briefing.notam_critical_count}
-                  </span>
-                )}
-              </button>
-            ))}
+            {(["metar", "taf", "notam", "sigmet"] as const).map((tab) => {
+              const sigmetCount = sigmetData?.sigmets?.length ?? 0;
+              const airmetCount = sigmetData?.airmets?.length ?? 0;
+              return (
+                <button
+                  key={tab}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailTab(tab);
+                  }}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    detailTab === tab
+                      ? "bg-zinc-700 text-white"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  {tab.toUpperCase()}
+                  {tab === "notam" && briefing.notam_critical_count > 0 && (
+                    <span className="ml-1 bg-red-500 text-white text-xs px-1 rounded-full">
+                      {briefing.notam_critical_count}
+                    </span>
+                  )}
+                  {tab === "sigmet" && sigmetCount > 0 && (
+                    <span className="ml-1 bg-red-500 text-white text-xs px-1 rounded-full">
+                      {sigmetCount}
+                    </span>
+                  )}
+                  {tab === "sigmet" && airmetCount > 0 && (
+                    <span className="ml-1 bg-amber-500 text-white text-xs px-1 rounded-full">
+                      {airmetCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* METAR */}
@@ -720,10 +762,21 @@ function AirportBriefingCard({
                   ))}
                 </div>
               )}
-              <p className="text-xs text-zinc-600 text-right">
-                Updated:{" "}
-                {new Date(metar.fetched_at * 1000).toLocaleTimeString()}
-              </p>
+              <div className="flex justify-between text-xs text-zinc-600">
+                <a
+                  href={`https://aviationweather.gov/data/metar/?id=${metar.station || briefing.icao || station}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-zinc-400 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  AWC Source {"\u2197"}
+                </a>
+                <span>
+                  Updated:{" "}
+                  {new Date(metar.fetched_at * 1000).toLocaleTimeString()}
+                </span>
+              </div>
             </div>
           )}
 
@@ -792,20 +845,42 @@ function AirportBriefingCard({
                   })}
                 </div>
               )}
-              <p className="text-xs text-zinc-600 text-right">
-                Updated:{" "}
-                {new Date(taf.fetched_at * 1000).toLocaleTimeString()}
-              </p>
+              <div className="flex justify-between text-xs text-zinc-600">
+                <a
+                  href={`https://aviationweather.gov/data/taf/?id=${taf.station || briefing.icao || station}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-zinc-400 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  AWC Source {"\u2197"}
+                </a>
+                <span>
+                  Updated:{" "}
+                  {new Date(taf.fetched_at * 1000).toLocaleTimeString()}
+                </span>
+              </div>
             </div>
           )}
 
           {/* NOTAM */}
           {detailTab === "notam" && (
             <div className="space-y-2 mt-3">
-              <p className="text-xs text-zinc-500">
-                {notams.length} NOTAMs ({briefing.notam_critical_count}{" "}
-                critical)
-              </p>
+              <div className="flex justify-between text-xs text-zinc-500">
+                <span>
+                  {notams.length} NOTAMs ({briefing.notam_critical_count}{" "}
+                  critical)
+                </span>
+                <a
+                  href="https://notams.aim.faa.gov/notamSearch/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-600 hover:text-zinc-400 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  FAA Source {"\u2197"}
+                </a>
+              </div>
               {notams.length === 0 ? (
                 <div className="text-center py-4 text-zinc-500 text-sm">
                   No NOTAMs available
@@ -843,10 +918,158 @@ function AirportBriefingCard({
               )}
             </div>
           )}
+
+          {/* SIGMET/AIRMET */}
+          {detailTab === "sigmet" && (
+            <SigmetTabContent sigmetData={sigmetData} sigmetLoading={sigmetLoading} />
+          )}
         </div>
       )}
     </div>
   );
+}
+
+/* ─────────────── SIGMET Tab Content ─────────────── */
+
+function SigmetTabContent({
+  sigmetData,
+  sigmetLoading,
+}: {
+  sigmetData: any;
+  sigmetLoading?: boolean;
+}) {
+  if (sigmetLoading) {
+    return (
+      <div className="text-center py-6 text-zinc-500 text-sm mt-3">
+        Loading SIGMET/AIRMET...
+      </div>
+    );
+  }
+
+  if (!sigmetData) {
+    return (
+      <div className="text-center py-6 text-zinc-500 text-sm mt-3">
+        No active SIGMET/AIRMET
+      </div>
+    );
+  }
+
+  const sigmets: any[] = sigmetData.sigmets || [];
+  const airmets: any[] = sigmetData.airmets || [];
+  const allItems = [...sigmets, ...airmets];
+  const origin = sigmetData.origin;
+  const destination = sigmetData.destination;
+
+  const polygons = allItems
+    .filter((item: any) => item.coords && item.coords.length >= 3)
+    .map((item: any) => ({
+      coords: item.coords,
+      type: item.type as "SIGMET" | "AIRMET",
+      hazard: item.hazard || "",
+    }));
+
+  return (
+    <div className="space-y-2 mt-3">
+      <div className="flex justify-between text-xs text-zinc-500">
+        <span>{sigmets.length} SIGMETs, {airmets.length} AIRMETs</span>
+        <a
+          href={(() => {
+            if (!origin || !destination) return "https://aviationweather.gov/gfa/?tab=sigmet";
+            const cLat = ((origin.lat + destination.lat) / 2).toFixed(3);
+            const cLon = ((origin.lon + destination.lon) / 2).toFixed(3);
+            return `https://aviationweather.gov/gfa/?tab=sigmet&center=${cLat},${cLon}&zoom=5`;
+          })()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-600 hover:text-zinc-400 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          AWC Source {"\u2197"}
+        </a>
+      </div>
+
+      {/* 미니맵 */}
+      {origin && destination && (
+        <RouteMap
+          origin={{ lat: origin.lat, lon: origin.lon, label: origin.iata }}
+          destination={{ lat: destination.lat, lon: destination.lon, label: destination.iata }}
+          polygons={polygons}
+        />
+      )}
+
+      {/* 카드 목록 */}
+      {allItems.length === 0 ? (
+        <div className="text-center py-4 text-zinc-500 text-sm">
+          No active SIGMET/AIRMET on this route
+        </div>
+      ) : (
+        allItems.map((item: any, i: number) => {
+          const isSigmet = item.type === "SIGMET";
+          return (
+            <div
+              key={i}
+              className={`bg-zinc-900/50 rounded-lg p-3 border ${
+                isSigmet ? "border-red-600/50" : "border-amber-600/50"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span
+                  className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                    isSigmet
+                      ? "bg-red-600 text-white"
+                      : "bg-amber-500 text-white"
+                  }`}
+                >
+                  {item.type}
+                </span>
+                <span className="text-xs font-bold text-zinc-200">
+                  {item.hazard}
+                </span>
+                {item.severity && (
+                  <span className="text-xs text-zinc-400">
+                    {item.severity}
+                  </span>
+                )}
+              </div>
+              {(item.altitude_low || item.altitude_high) && (
+                <p className="text-xs text-zinc-400 font-mono">
+                  {item.altitude_low || "SFC"} {"\u2014"} {item.altitude_high || "UNL"}
+                </p>
+              )}
+              {item.valid_from && item.valid_to && (
+                <p className="text-xs text-zinc-500 font-mono">
+                  {_formatSigmetTime(item.valid_from)} {"\u2192"} {_formatSigmetTime(item.valid_to)}
+                </p>
+              )}
+              {item.movement && (
+                <p className="text-xs text-zinc-500">
+                  MOV {item.movement}
+                </p>
+              )}
+              {item.raw && (
+                <p className="text-xs font-mono leading-relaxed text-zinc-400 break-all mt-1">
+                  {item.raw}
+                </p>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function _formatSigmetTime(iso: string): string {
+  if (!iso) return "--";
+  try {
+    const d = new Date(iso);
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    const mm = String(d.getUTCMinutes()).padStart(2, "0");
+    return `${dd}/${hh}${mm}Z`;
+  } catch {
+    return iso;
+  }
 }
 
 /* ─────────────── Helper Components ─────────────── */
