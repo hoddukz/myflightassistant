@@ -58,6 +58,7 @@ def save_schedule(user_id: str, email: str, pairings: list[Pairing]) -> None:
                 "pairing_id": db_pid,
                 "flight_date": day.flight_date.isoformat(),
                 "report_time": day.report_time,
+                "report_time_utc": day.report_time_utc,
                 "day_block": day.day_block,
                 "day_credit": day.day_credit,
                 "duty_time": day.duty_time,
@@ -206,6 +207,7 @@ def get_schedule(user_id: str) -> Optional[ScheduleResponse]:
                 DayDetail(
                     flight_date=date.fromisoformat(fd),
                     report_time=dr["report_time"],
+                    report_time_utc=dr.get("report_time_utc"),
                     legs=legs_by_date.get(fd, []),
                     day_block=dr["day_block"],
                     day_credit=dr["day_credit"],

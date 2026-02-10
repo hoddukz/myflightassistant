@@ -761,9 +761,9 @@ function AirportBriefingCard({
           {/* METAR */}
           {detailTab === "metar" && metar && (
             <div className="space-y-2 mt-3">
-              <div className="bg-zinc-900/50 rounded-lg p-3">
+              <div className="bg-zinc-800 rounded-lg p-3">
                 <p className="text-xs text-zinc-500 mb-1">Raw METAR</p>
-                <p className="text-sm font-mono leading-relaxed text-zinc-200 break-all">
+                <p className="text-sm font-mono leading-relaxed text-zinc-100 break-all">
                   {metar.raw}
                 </p>
               </div>
@@ -812,9 +812,9 @@ function AirportBriefingCard({
           {/* TAF */}
           {detailTab === "taf" && taf && (
             <div className="space-y-2 mt-3">
-              <div className="bg-zinc-900/50 rounded-lg p-3">
+              <div className="bg-zinc-800 rounded-lg p-3">
                 <p className="text-xs text-zinc-500 mb-1">Raw TAF</p>
-                <p className="text-sm font-mono leading-relaxed text-zinc-200 break-all">
+                <p className="text-sm font-mono leading-relaxed text-zinc-100 break-all">
                   {taf.raw}
                 </p>
               </div>

@@ -239,3 +239,80 @@ export async function fetchTrackerStatus() {
   }
   return safeJson(res);
 }
+
+export async function getVapidKey(): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/push/vapid-key`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch VAPID key");
+  }
+  const data = await safeJson(res);
+  return data.public_key;
+}
+
+export async function subscribePush(subscription: PushSubscriptionJSON): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/subscribe`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(subscription),
+  });
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to subscribe push");
+  }
+}
+
+export async function unsubscribePush(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/subscribe`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to unsubscribe push");
+  }
+}
+
+export async function sendTestPush(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/test`, {
+    method: "POST",
+    headers,
+  });
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to send test push");
+  }
+}
+
+export async function getReminderSettings(): Promise<{
+  reminder_enabled: boolean;
+  reminder_minutes: number[];
+}> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/reminder-settings`, {
+    headers,
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch reminder settings");
+  }
+  return safeJson(res);
+}
+
+export async function saveReminderSettings(
+  enabled: boolean,
+  minutes: number[]
+): Promise<{ reminder_enabled: boolean; reminder_minutes: number[] }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/reminder-settings`, {
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ reminder_enabled: enabled, reminder_minutes: minutes }),
+  });
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to save reminder settings");
+  }
+  return safeJson(res);
+}

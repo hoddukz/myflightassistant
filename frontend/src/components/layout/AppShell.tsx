@@ -25,6 +25,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     html.classList.add(resolvedTheme);
   }, [resolvedTheme]);
 
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js");
+    }
+  }, []);
+
   if (pathname === "/login") {
     return <>{children}</>;
   }
