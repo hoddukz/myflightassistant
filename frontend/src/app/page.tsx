@@ -5,6 +5,7 @@
 
 import { useMemo } from "react";
 import { useScheduleStore } from "@/stores/scheduleStore";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { getEventTypeLabel, getEventTypeColor, toUtcDate, utcHHMM } from "@/lib/utils";
 import Link from "next/link";
 import InboundAircraft from "@/components/dashboard/InboundAircraft";
@@ -12,6 +13,7 @@ import type { Pairing, DayDetail } from "@/types";
 
 export default function Dashboard() {
   const { pairings, totalFlights } = useScheduleStore();
+  const theme = useResolvedTheme();
 
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -279,7 +281,7 @@ export default function Dashboard() {
           {/* Next Flight 카운트다운 */}
           {nextFlight && (
             <Link href="/briefing" className="block">
-              <div className="bg-gradient-to-r from-blue-900/40 to-zinc-900 rounded-xl p-4 border border-blue-800/30">
+              <div className={`rounded-xl p-4 border ${theme === "light" ? "bg-zinc-900 border-zinc-800" : "bg-gradient-to-r from-blue-900/40 to-zinc-900 border-blue-800/30"}`}>
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-blue-400 font-semibold">NEXT FLIGHT</p>
                   <CountdownDisplay target={nextFlight.depUtc} now={now} />

@@ -8,7 +8,7 @@ export type TempUnit = "C" | "F";
 export type PressureUnit = "inHg" | "hPa";
 export type AltitudeUnit = "ft" | "m";
 export type TimezoneDisplay = "dual" | "utc" | "local";
-export type Theme = "dark" | "light";
+export type Theme = "dark" | "light" | "auto";
 
 interface SettingsState {
   tempUnit: TempUnit;

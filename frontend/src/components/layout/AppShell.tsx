@@ -10,19 +10,20 @@ import DualTimeBar from "@/components/layout/DualTimeBar";
 import BottomNav from "@/components/layout/BottomNav";
 import DisclaimerOverlay from "@/components/layout/DisclaimerOverlay";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 const DISCLAIMER_ENABLED = process.env.NEXT_PUBLIC_DISCLAIMER_ENABLED === "true";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const theme = useSettingsStore((s) => s.theme);
+  const resolvedTheme = useResolvedTheme();
   const disclaimerAccepted = useSettingsStore((s) => s.disclaimerAccepted);
 
   useEffect(() => {
     const html = document.documentElement;
     html.classList.remove("dark", "light");
-    html.classList.add(theme);
-  }, [theme]);
+    html.classList.add(resolvedTheme);
+  }, [resolvedTheme]);
 
   if (pathname === "/login") {
     return <>{children}</>;

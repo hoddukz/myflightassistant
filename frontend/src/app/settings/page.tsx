@@ -554,8 +554,9 @@ function UtilitiesView() {
 
 /* ── Theme Toggle ── */
 const themeOptions: { value: Theme; label: string }[] = [
-  { value: "dark", label: "Dark" },
   { value: "light", label: "Light" },
+  { value: "auto", label: "Auto" },
+  { value: "dark", label: "Dark" },
 ];
 
 function ThemeToggle() {
