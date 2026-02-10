@@ -26,7 +26,7 @@ async def get_current_user(
         return {"id": user.id, "email": user.email}
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

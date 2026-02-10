@@ -5,6 +5,12 @@ import { supabase } from "@/lib/supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+async function safeJson(res: Response) {
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   let {
     data: { session },
@@ -43,11 +49,11 @@ export async function uploadICS(file: File) {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Failed to upload ICS file");
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to upload ICS file");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function uploadCSV(file: File) {
@@ -62,11 +68,11 @@ export async function uploadCSV(file: File) {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Failed to upload CSV file");
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to upload CSV file");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function fetchSchedule() {
@@ -80,7 +86,7 @@ export async function fetchSchedule() {
     throw new Error("Failed to fetch schedule");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function deleteSchedule() {
@@ -92,11 +98,11 @@ export async function deleteSchedule() {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Failed to delete schedule");
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to delete schedule");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function fetchFullBriefing(station: string) {
@@ -104,7 +110,7 @@ export async function fetchFullBriefing(station: string) {
   if (!res.ok) {
     throw new Error(`Failed to fetch briefing for ${station}`);
   }
-  return res.json();
+  return safeJson(res);
 }
 
 export async function fetchRouteBriefing(origin: string, destination: string) {
@@ -114,7 +120,7 @@ export async function fetchRouteBriefing(origin: string, destination: string) {
   if (!res.ok) {
     throw new Error("Failed to fetch route briefing");
   }
-  return res.json();
+  return safeJson(res);
 }
 
 export async function saveCalendarUrl(icsUrl: string) {
@@ -127,11 +133,11 @@ export async function saveCalendarUrl(icsUrl: string) {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Failed to save calendar URL");
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to save calendar URL");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function getCalendarUrl() {
@@ -145,7 +151,7 @@ export async function getCalendarUrl() {
     throw new Error("Failed to fetch calendar URL");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function deleteCalendarUrl() {
@@ -157,11 +163,11 @@ export async function deleteCalendarUrl() {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Failed to delete calendar URL");
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to delete calendar URL");
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 export async function fetchSyncStatus() {
@@ -172,7 +178,7 @@ export async function fetchSyncStatus() {
   });
 
   if (!res.ok) return null;
-  return res.json();
+  return safeJson(res);
 }
 
 export async function syncNow() {
@@ -184,9 +190,9 @@ export async function syncNow() {
   });
 
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Sync failed");
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Sync failed");
   }
 
-  return res.json();
+  return safeJson(res);
 }

@@ -161,7 +161,7 @@ async def get_calendar_url_endpoint(
     """현재 등록된 Calendar URL + 동기화 상태 조회."""
     source = get_calendar_source(current_user["id"])
     if not source:
-        return None
+        return {"ics_url": None, "last_synced_at": None, "sync_enabled": False}
     return CalendarUrlResponse(
         ics_url=source["ics_url"],
         last_synced_at=source.get("last_synced_at"),

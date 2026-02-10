@@ -43,3 +43,4 @@ schedule_samples/
 
 # Misc
 *.log
+.vercel

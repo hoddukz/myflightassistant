@@ -5,13 +5,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import {
-  useSettingsStore,
-  type TempUnit,
-  type PressureUnit,
-  type AltitudeUnit,
-  type TimezoneDisplay,
-} from "@/stores/settingsStore";
 import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -19,89 +12,10 @@ import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow } from "@/l
 
 type Tab = "settings" | "converter" | "notes";
 
-/* ── Toggle Group ── */
-function ToggleGroup<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { label: string; value: T }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex gap-2 mt-2">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            value === opt.value
-              ? "bg-blue-600 text-white"
-              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /* ── Settings Tab ── */
 function SettingsTab() {
-  const {
-    tempUnit, pressureUnit, altitudeUnit, timezoneDisplay,
-    setTempUnit, setPressureUnit, setAltitudeUnit, setTimezoneDisplay,
-  } = useSettingsStore();
-
   return (
     <div className="space-y-3">
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Temperature</p>
-        <ToggleGroup<TempUnit>
-          options={[
-            { label: "\u00B0C", value: "C" },
-            { label: "\u00B0F", value: "F" },
-          ]}
-          value={tempUnit}
-          onChange={setTempUnit}
-        />
-      </div>
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Pressure</p>
-        <ToggleGroup<PressureUnit>
-          options={[
-            { label: "inHg", value: "inHg" },
-            { label: "hPa", value: "hPa" },
-          ]}
-          value={pressureUnit}
-          onChange={setPressureUnit}
-        />
-      </div>
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Altitude</p>
-        <ToggleGroup<AltitudeUnit>
-          options={[
-            { label: "ft", value: "ft" },
-            { label: "m", value: "m" },
-          ]}
-          value={altitudeUnit}
-          onChange={setAltitudeUnit}
-        />
-      </div>
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Timezone Display</p>
-        <ToggleGroup<TimezoneDisplay>
-          options={[
-            { label: "UTC + Local", value: "dual" },
-            { label: "UTC Only", value: "utc" },
-            { label: "Local Only", value: "local" },
-          ]}
-          value={timezoneDisplay}
-          onChange={setTimezoneDisplay}
-        />
-      </div>
       <CalendarSyncSection />
       <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
         <p className="text-sm font-medium">Theme</p>
