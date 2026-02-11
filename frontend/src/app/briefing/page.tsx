@@ -131,10 +131,7 @@ export default function BriefingPage() {
     }
   }, [trips, activeTripIndex, todayStr]);
 
-  // 스케줄 없으면 검색 모드
-  useEffect(() => {
-    if (trips.length === 0) setSearchOpen(true);
-  }, [trips.length]);
+  // 스케줄 없으면 검색 모드 (수동 토글로 변경 — 기본 닫힘)
 
   // trips 변경 시 인덱스 범위 보정
   useEffect(() => {

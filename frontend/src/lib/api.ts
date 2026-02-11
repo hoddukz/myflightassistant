@@ -5,6 +5,23 @@ import { supabase } from "@/lib/supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+/* ── Device ID ── */
+export function getDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("mfa-device-id");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("mfa-device-id", id);
+  }
+  return id;
+}
+
+/* ── Session expired handler (set by authStore) ── */
+let onSessionExpired: (() => void) | null = null;
+export function setSessionExpiredHandler(handler: () => void) {
+  onSessionExpired = handler;
+}
+
 async function safeJson(res: Response) {
   const text = await res.text();
   if (!text) return null;
@@ -34,19 +51,84 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 
   if (!session?.access_token) return {};
-  return { Authorization: `Bearer ${session.access_token}` };
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+
+  const deviceId = getDeviceId();
+  if (deviceId) {
+    headers["X-Device-ID"] = deviceId;
+  }
+
+  return headers;
 }
 
+/* ── 401 session_expired 감지 래퍼 ── */
+async function handleResponse(res: Response) {
+  if (res.status === 401) {
+    const body = await safeJson(res);
+    if (body?.detail === "session_expired" && onSessionExpired) {
+      onSessionExpired();
+    }
+    throw new Error(body?.detail || "Unauthorized");
+  }
+  return res;
+}
+
+/* ── Session API ── */
+export async function registerSession(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/session/register`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      device_id: getDeviceId(),
+      device_info: navigator.userAgent,
+    }),
+  });
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to register session");
+  }
+}
+
+export async function heartbeatSession(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/session/heartbeat`, {
+    method: "POST",
+    headers,
+  });
+  // heartbeat 실패는 조용히 무시
+  if (res.status === 401) {
+    const body = await safeJson(res);
+    if (body?.detail === "session_expired" && onSessionExpired) {
+      onSessionExpired();
+    }
+  }
+}
+
+export async function logoutSession(): Promise<void> {
+  const headers = await getAuthHeaders();
+  await fetch(`${API_BASE}/api/session/logout`, {
+    method: "DELETE",
+    headers,
+  });
+}
+
+/* ── Schedule API ── */
 export async function uploadICS(file: File) {
   const formData = new FormData();
   formData.append("file", file);
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule/upload/ics`, {
-    method: "POST",
-    headers,
-    body: formData,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule/upload/ics`, {
+      method: "POST",
+      headers,
+      body: formData,
+    })
+  );
 
   if (!res.ok) {
     const error = await safeJson(res);
@@ -61,11 +143,13 @@ export async function uploadCSV(file: File) {
   formData.append("file", file);
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule/upload/csv`, {
-    method: "POST",
-    headers,
-    body: formData,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule/upload/csv`, {
+      method: "POST",
+      headers,
+      body: formData,
+    })
+  );
 
   if (!res.ok) {
     const error = await safeJson(res);
@@ -78,9 +162,11 @@ export async function uploadCSV(file: File) {
 export async function fetchSchedule() {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule`, {
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule`, {
+      headers,
+    })
+  );
 
   if (!res.ok) {
     throw new Error("Failed to fetch schedule");
@@ -92,10 +178,12 @@ export async function fetchSchedule() {
 export async function deleteSchedule() {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule`, {
-    method: "DELETE",
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule`, {
+      method: "DELETE",
+      headers,
+    })
+  );
 
   if (!res.ok) {
     const error = await safeJson(res);
@@ -136,11 +224,13 @@ export async function fetchRouteBriefing(origin: string, destination: string) {
 export async function saveCalendarUrl(icsUrl: string) {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule/calendar-url`, {
-    method: "PUT",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({ ics_url: icsUrl }),
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule/calendar-url`, {
+      method: "PUT",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ ics_url: icsUrl }),
+    })
+  );
 
   if (!res.ok) {
     const error = await safeJson(res);
@@ -153,9 +243,11 @@ export async function saveCalendarUrl(icsUrl: string) {
 export async function getCalendarUrl() {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule/calendar-url`, {
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule/calendar-url`, {
+      headers,
+    })
+  );
 
   if (!res.ok) {
     throw new Error("Failed to fetch calendar URL");
@@ -167,10 +259,12 @@ export async function getCalendarUrl() {
 export async function deleteCalendarUrl() {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule/calendar-url`, {
-    method: "DELETE",
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule/calendar-url`, {
+      method: "DELETE",
+      headers,
+    })
+  );
 
   if (!res.ok) {
     const error = await safeJson(res);
@@ -194,10 +288,12 @@ export async function fetchSyncStatus() {
 export async function syncNow() {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE}/api/schedule/sync-now`, {
-    method: "POST",
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/schedule/sync-now`, {
+      method: "POST",
+      headers,
+    })
+  );
 
   if (!res.ok) {
     const error = await safeJson(res);
@@ -207,6 +303,7 @@ export async function syncNow() {
   return safeJson(res);
 }
 
+/* ── Flight API ── */
 export async function fetchFlightTrack({
   tail_number,
   flight_number,
@@ -240,6 +337,7 @@ export async function fetchTrackerStatus() {
   return safeJson(res);
 }
 
+/* ── Push API ── */
 export async function getVapidKey(): Promise<string> {
   const res = await fetch(`${API_BASE}/api/push/vapid-key`);
   if (!res.ok) {
@@ -251,11 +349,13 @@ export async function getVapidKey(): Promise<string> {
 
 export async function subscribePush(subscription: PushSubscriptionJSON): Promise<void> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/subscribe`, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify(subscription),
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/subscribe`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(subscription),
+    })
+  );
   if (!res.ok) {
     const error = await safeJson(res);
     throw new Error(error?.detail || "Failed to subscribe push");
@@ -264,10 +364,12 @@ export async function subscribePush(subscription: PushSubscriptionJSON): Promise
 
 export async function unsubscribePush(): Promise<void> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/subscribe`, {
-    method: "DELETE",
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/subscribe`, {
+      method: "DELETE",
+      headers,
+    })
+  );
   if (!res.ok) {
     const error = await safeJson(res);
     throw new Error(error?.detail || "Failed to unsubscribe push");
@@ -276,10 +378,12 @@ export async function unsubscribePush(): Promise<void> {
 
 export async function sendTestPush(): Promise<void> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/test`, {
-    method: "POST",
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/test`, {
+      method: "POST",
+      headers,
+    })
+  );
   if (!res.ok) {
     const error = await safeJson(res);
     throw new Error(error?.detail || "Failed to send test push");
@@ -291,9 +395,11 @@ export async function getReminderSettings(): Promise<{
   reminder_minutes: number[];
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/reminder-settings`, {
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/reminder-settings`, {
+      headers,
+    })
+  );
   if (!res.ok) {
     throw new Error("Failed to fetch reminder settings");
   }
@@ -305,11 +411,13 @@ export async function saveReminderSettings(
   minutes: number[]
 ): Promise<{ reminder_enabled: boolean; reminder_minutes: number[] }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/reminder-settings`, {
-    method: "PUT",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({ reminder_enabled: enabled, reminder_minutes: minutes }),
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/reminder-settings`, {
+      method: "PUT",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ reminder_enabled: enabled, reminder_minutes: minutes }),
+    })
+  );
   if (!res.ok) {
     const error = await safeJson(res);
     throw new Error(error?.detail || "Failed to save reminder settings");
@@ -321,9 +429,11 @@ export async function getWeatherAlertSettings(): Promise<{
   weather_alerts_enabled: boolean;
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/weather-alert-settings`, {
-    headers,
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/weather-alert-settings`, {
+      headers,
+    })
+  );
   if (!res.ok) {
     throw new Error("Failed to fetch weather alert settings");
   }
@@ -334,11 +444,13 @@ export async function saveWeatherAlertSettings(
   enabled: boolean
 ): Promise<{ weather_alerts_enabled: boolean }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/push/weather-alert-settings`, {
-    method: "PUT",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({ weather_alerts_enabled: enabled }),
-  });
+  const res = await handleResponse(
+    await fetch(`${API_BASE}/api/push/weather-alert-settings`, {
+      method: "PUT",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ weather_alerts_enabled: enabled }),
+    })
+  );
   if (!res.ok) {
     const error = await safeJson(res);
     throw new Error(error?.detail || "Failed to save weather alert settings");

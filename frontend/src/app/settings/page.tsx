@@ -399,7 +399,7 @@ function ConverterTab() {
                   inputMode="decimal"
                   value={values[c.label]?.left ?? ""}
                   onChange={(e) => handleLeft(c.label, e.target.value, c.fwd)}
-                  className="w-full bg-transparent px-3 py-2 text-sm text-white outline-none"
+                  className="w-full bg-transparent px-3 py-2 text-sm text-foreground outline-none"
                   placeholder="0"
                 />
                 <span className="text-xs text-zinc-400 pr-3 whitespace-nowrap">{c.from}</span>
@@ -413,7 +413,7 @@ function ConverterTab() {
                   inputMode="decimal"
                   value={values[c.label]?.right ?? ""}
                   onChange={(e) => handleRight(c.label, e.target.value, c.rev)}
-                  className="w-full bg-transparent px-3 py-2 text-sm text-white outline-none"
+                  className="w-full bg-transparent px-3 py-2 text-sm text-foreground outline-none"
                   placeholder="0"
                 />
                 <span className="text-xs text-zinc-400 pr-3 whitespace-nowrap">{c.to}</span>
@@ -484,7 +484,7 @@ function NotesTab() {
           onChange={(e) => setText(e.target.value)}
           placeholder="Write a note..."
           rows={3}
-          className="w-full bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white outline-none resize-none placeholder:text-zinc-600"
+          className="w-full bg-zinc-800 rounded-lg px-3 py-2 text-sm text-foreground outline-none resize-none placeholder:text-zinc-600"
         />
         <button
           onClick={handleAdd}
@@ -502,7 +502,7 @@ function NotesTab() {
         notes.map((note) => (
           <div key={note.id} className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-sm text-zinc-200 whitespace-pre-wrap flex-1">{note.text}</p>
+              <p className="text-sm text-foreground whitespace-pre-wrap flex-1">{note.text}</p>
               <button
                 onClick={() => deleteNote(note.id)}
                 className="text-zinc-600 hover:text-red-400 text-xs shrink-0"
@@ -546,7 +546,7 @@ function UtilitiesView() {
             onClick={() => setActiveTab(t)}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === t
-                ? "bg-zinc-700 text-white"
+                ? "bg-zinc-700 text-foreground"
                 : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
@@ -1070,12 +1070,19 @@ export default function SettingsPage() {
                     <span className="material-icons text-blue-400 text-sm">cloud_upload</span>
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium">Upload & Sync</p>
+                    <p className="text-sm font-medium">Roster</p>
                     <p className="text-xs text-zinc-500 mt-0.5">Import roster, sync calendar</p>
                   </div>
                 </div>
                 <span className="material-icons text-zinc-600 text-lg">chevron_right</span>
               </button>
+            </div>
+          </div>
+
+          {/* Tools */}
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1">Tools</h2>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
               <button
                 onClick={() => setView("utilities")}
                 className="w-full p-4 flex items-center justify-between active:bg-zinc-800 transition-colors"

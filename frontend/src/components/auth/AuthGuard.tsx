@@ -7,11 +7,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/authStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, initialize } = useAuthStore();
   const fetchSchedule = useScheduleStore((s) => s.fetchSchedule);
+
+  useActivityTracker();
 
   useEffect(() => {
     initialize();

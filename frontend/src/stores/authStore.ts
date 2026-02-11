@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { registerSession, logoutSession, setSessionExpiredHandler } from "@/lib/api";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface AuthState {
@@ -19,7 +20,7 @@ interface AuthState {
   initialize: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
+export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   session: null,
   loading: true,
@@ -32,6 +33,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
     });
     if (error) return { error: error.message };
     set({ user: data.user, session: data.session });
+
+    // 로그인 성공 후 세션 등록
+    try {
+      await registerSession();
+    } catch {
+      // 세션 등록 실패해도 로그인은 유지
+    }
+
     return { error: null };
   },
 
@@ -65,6 +74,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 
   signOut: async () => {
+    // 세션 삭제 후 Supabase signOut
+    try {
+      await logoutSession();
+    } catch {
+      // 세션 삭제 실패해도 로그아웃 진행
+    }
     await supabase.auth.signOut();
     set({ user: null, session: null });
     useSettingsStore.getState().setDisclaimerAccepted(false);
@@ -74,7 +89,26 @@ export const useAuthStore = create<AuthState>()((set) => ({
     const {
       data: { session },
     } = await supabase.auth.getSession();
+
+    // 기존 세션이 있으면 세션 등록 (타임아웃 3초, 실패해도 진행)
+    if (session?.user) {
+      try {
+        await Promise.race([
+          registerSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000)),
+        ]);
+      } catch {
+        // 타임아웃 또는 실패 시 무시 — 로딩은 계속 진행
+      }
+    }
+
     set({ user: session?.user ?? null, session, loading: false });
+
+    // session_expired 시 자동 로그아웃 핸들러 등록
+    setSessionExpiredHandler(() => {
+      const { signOut } = get();
+      signOut();
+    });
 
     supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
