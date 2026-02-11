@@ -3,6 +3,7 @@
 
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
+import { useSettingsStore } from "@/stores/settingsStore";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface AuthState {
@@ -66,6 +67,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signOut: async () => {
     await supabase.auth.signOut();
     set({ user: null, session: null });
+    useSettingsStore.getState().setDisclaimerAccepted(false);
   },
 
   initialize: async () => {
