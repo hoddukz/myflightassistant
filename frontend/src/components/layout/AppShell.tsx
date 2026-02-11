@@ -12,8 +12,8 @@ import DisclaimerOverlay from "@/components/layout/DisclaimerOverlay";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
-// 기본값 true (프로덕션), 로컬에서 끄려면 NEXT_PUBLIC_DISCLAIMER_ENABLED=false
-const DISCLAIMER_ENABLED = process.env.NEXT_PUBLIC_DISCLAIMER_ENABLED !== "false";
+// 프로덕션 빌드에서만 Disclaimer 표시, 로컬 개발환경에서는 자동 OFF
+const DISCLAIMER_ENABLED = process.env.NODE_ENV === "production";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
