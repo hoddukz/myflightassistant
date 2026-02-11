@@ -16,17 +16,24 @@ const RouteMap = dynamic(
 );
 
 const CATEGORY_COLORS: Record<string, string> = {
-  VFR: "text-emerald-400 border-emerald-400",
-  MVFR: "text-blue-400 border-blue-400",
-  IFR: "text-red-400 border-red-400",
-  LIFR: "text-purple-400 border-purple-400",
+  VFR: "text-emerald-400 border-emerald-400/30",
+  MVFR: "text-[#60a5fa] border-[#60a5fa]/30",
+  IFR: "text-red-400 border-red-400/30",
+  LIFR: "text-purple-400 border-purple-400/30",
 };
 
 const CATEGORY_BG: Record<string, string> = {
-  VFR: "bg-emerald-400/10",
-  MVFR: "bg-blue-400/10",
-  IFR: "bg-red-400/10",
-  LIFR: "bg-purple-400/10",
+  VFR: "bg-emerald-400/5",
+  MVFR: "bg-[#60a5fa]/5",
+  IFR: "bg-red-400/5",
+  LIFR: "bg-purple-400/5",
+};
+
+const CATEGORY_BADGE: Record<string, string> = {
+  VFR: "bg-emerald-900/30 text-emerald-400 border-emerald-800",
+  MVFR: "bg-[#60a5fa]/10 text-[#60a5fa] border-[#60a5fa]/30",
+  IFR: "bg-red-900/30 text-red-400 border-red-800",
+  LIFR: "bg-purple-900/30 text-purple-400 border-purple-800",
 };
 
 const HIGHLIGHT_KEYWORDS = [
@@ -635,10 +642,10 @@ function AirportBriefingCard({
           <div className="flex items-center gap-2">
             {label && (
               <span
-                className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                className={`text-xs font-bold px-2 py-1 rounded-md ${
                   label === "DEP"
-                    ? "bg-blue-600/20 text-blue-400"
-                    : "bg-amber-600/20 text-amber-400"
+                    ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                    : "bg-zinc-800 text-zinc-300 border border-zinc-700"
                 }`}
               >
                 {label}
@@ -648,8 +655,8 @@ function AirportBriefingCard({
               {briefing.station || station}
             </span>
             <span
-              className={`text-xl font-black ${
-                CATEGORY_COLORS[category] || ""
+              className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                CATEGORY_BADGE[category] || ""
               }`}
             >
               {category}
@@ -682,7 +689,7 @@ function AirportBriefingCard({
           </div>
         </div>
         {metar && (
-          <div className="grid grid-cols-4 gap-2 mt-2 text-center">
+          <div className="grid grid-cols-4 gap-2 mt-2 bg-zinc-800/30 rounded-lg p-2">
             <MiniStat
               label="Temp"
               value={
@@ -706,7 +713,7 @@ function AirportBriefingCard({
             <MiniStat
               label="Ceil"
               value={
-                metar.ceiling != null ? `${metar.ceiling}ft` : "CLR"
+                metar.ceiling != null ? `${fmtFt(metar.ceiling)}ft` : "CLR"
               }
             />
           </div>
@@ -719,8 +726,8 @@ function AirportBriefingCard({
       {/* 펼침 상세 */}
       {expanded && (
         <div className="border-t border-zinc-800/50 px-3 pb-3">
-          {/* METAR / TAF / NOTAM / SIGMET 탭 */}
-          <div className="flex gap-1 bg-zinc-900/50 rounded-lg p-1 mt-3">
+          {/* METAR / TAF / NOTAM / SIGMET 탭 — segment control */}
+          <div className="flex gap-1 bg-zinc-800 rounded-lg p-1 mt-3">
             {(["metar", "taf", "notam", "sigmet"] as const).map((tab) => {
               const sigmetCount = sigmetData?.sigmets?.length ?? 0;
               const airmetCount = sigmetData?.airmets?.length ?? 0;
@@ -731,9 +738,9 @@ function AirportBriefingCard({
                     e.stopPropagation();
                     setDetailTab(tab);
                   }}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                     detailTab === tab
-                      ? "bg-zinc-700 text-white"
+                      ? "bg-zinc-900 text-zinc-100 shadow-sm ring-1 ring-zinc-700"
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
@@ -761,23 +768,56 @@ function AirportBriefingCard({
           {/* METAR */}
           {detailTab === "metar" && metar && (
             <div className="space-y-2 mt-3">
-              <div className="bg-zinc-800 rounded-lg p-3">
-                <p className="text-xs text-zinc-500 mb-1">Raw METAR</p>
-                <p className="text-sm font-mono leading-relaxed text-zinc-100 break-all">
-                  {metar.raw}
+              <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-700/50">
+                <div className="flex justify-between items-baseline mb-1">
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Raw METAR</p>
+                </div>
+                <p className="text-sm font-mono leading-relaxed text-zinc-300 break-all">
+                  <MetarHighlightedText text={metar.raw} station={metar.station || briefing.station || station} />
                 </p>
               </div>
-              {metar.weather && (
-                <div className="bg-zinc-900/50 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Weather</p>
-                  <p className="text-sm font-mono text-amber-400">
-                    {metar.weather}
-                  </p>
+              {/* Decoded highlights grid */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 rounded bg-zinc-800/50 border border-zinc-700/50">
+                  <div className="text-[10px] uppercase text-zinc-500 font-semibold">Wind</div>
+                  <div className="flex items-center mt-1">
+                    <span className="material-icons text-zinc-400 text-sm mr-1">navigation</span>
+                    <span className="text-sm font-bold">
+                      {metar.wind_speed != null ? `${metar.wind_direction}\u00B0/${metar.wind_speed}kt` : "Calm"}
+                    </span>
+                  </div>
                 </div>
-              )}
+                <div className="p-2 rounded bg-zinc-800/50 border border-zinc-700/50">
+                  <div className="text-[10px] uppercase text-zinc-500 font-semibold">Visibility</div>
+                  <div className="flex items-center mt-1">
+                    <span className="material-icons text-zinc-400 text-sm mr-1">visibility</span>
+                    <span className="text-sm font-bold">
+                      {metar.visibility != null ? `${metar.visibility} SM` : "\u2014"}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-zinc-800/50 border border-zinc-700/50">
+                  <div className="text-[10px] uppercase text-zinc-500 font-semibold">Ceiling</div>
+                  <div className="flex items-center mt-1">
+                    <span className="material-icons text-zinc-400 text-sm mr-1">cloud</span>
+                    <span className="text-sm font-bold">
+                      {metar.ceiling != null ? `${fmtFt(metar.ceiling)} ft AGL` : "CLR"}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-zinc-800/50 border border-zinc-700/50">
+                  <div className="text-[10px] uppercase text-zinc-500 font-semibold">Weather</div>
+                  <div className="flex items-center mt-1">
+                    <span className="material-icons text-zinc-400 text-sm mr-1">water_drop</span>
+                    <span className="text-sm font-bold text-amber-400">
+                      {metar.weather || "None"}
+                    </span>
+                  </div>
+                </div>
+              </div>
               {metar.clouds && metar.clouds.length > 0 && (
-                <div className="bg-zinc-900/50 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Cloud Layers</p>
+                <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
+                  <p className="text-[10px] text-zinc-500 uppercase font-semibold mb-1">Cloud Layers</p>
                   {metar.clouds.map((c: any, i: number) => (
                     <div
                       key={i}
@@ -785,7 +825,7 @@ function AirportBriefingCard({
                     >
                       <span className="text-zinc-300">{c.cover}</span>
                       <span className="text-zinc-500">
-                        {c.base ? `${c.base} ft` : ""}
+                        {c.base ? `${fmtFt(c.base)} ft` : ""}
                       </span>
                     </div>
                   ))}
@@ -1103,11 +1143,44 @@ function _formatSigmetTime(iso: string): string {
 
 /* ─────────────── Helper Components ─────────────── */
 
+function fmtFt(v: number | string): string {
+  return Number(v).toLocaleString("en-US");
+}
+
+const METAR_WX_KEYWORDS = [
+  "TS", "TSRA", "TSGR", "FG", "BR", "HZ", "FU", "SN", "RA", "DZ",
+  "SH", "SHRA", "SHSN", "FZRA", "FZDZ", "FZFG", "GR", "GS",
+  "SQ", "FC", "VA", "PO", "SS", "DS", "BLSN", "BLDU",
+];
+
+function MetarHighlightedText({ text, station }: { text: string; station: string }) {
+  if (!text) return null;
+  const wxPattern = METAR_WX_KEYWORDS.map((k) => `\\b${k}\\b`).join("|");
+  const stationPattern = station ? `\\b${station}\\b` : "";
+  const pattern = [stationPattern, wxPattern].filter(Boolean).join("|");
+  const regex = new RegExp(`(${pattern})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (station && part.toUpperCase() === station.toUpperCase()) {
+          return <span key={i} className="text-yellow-400 font-bold">{part}</span>;
+        }
+        if (METAR_WX_KEYWORDS.some((kw) => kw.toUpperCase() === part.toUpperCase())) {
+          return <span key={i} className="text-red-400 font-bold">{part}</span>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="text-base font-mono font-bold">{value}</p>
+    <div className="text-center">
+      <p className="text-[10px] text-zinc-500 uppercase">{label}</p>
+      <p className="text-sm font-mono font-bold">{value}</p>
     </div>
   );
 }

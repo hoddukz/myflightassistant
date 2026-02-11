@@ -1,21 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
+  --background: #101922;
   --foreground: #ededed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Dark Mode — Navy Aviation Dashboard */
+.dark {
+  --background: #101922;
+  --foreground: #ededed;
+
+  /* Zinc → Navy tone remap */
+  --color-zinc-950: #101922;
+  --color-zinc-900: #182430;
+  --color-zinc-800: #1e2936;
+  --color-zinc-700: #2a3a48;
+  --color-zinc-600: #3d4f5f;
+  --color-zinc-500: #5f7386;
+  --color-zinc-400: #8899a8;
+  --color-zinc-300: #a8b8c8;
+  --color-zinc-200: #c8d4e0;
+  --color-zinc-100: #e0e8f0;
+
+  /* Blue — primary #258cf4 */
+  --color-blue-400: #258cf4;
+  --color-blue-500: #1e7ae0;
+  --color-blue-600: #1a6cc8;
+  --color-blue-700: #155bb0;
+  --color-blue-800: #1a3a5c;
+  --color-blue-900: #0f2440;
 }
 
 /* Light Mode */

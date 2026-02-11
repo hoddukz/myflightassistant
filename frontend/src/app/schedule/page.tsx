@@ -175,28 +175,39 @@ export default function SchedulePage() {
 
       {/* Timeline */}
       {pairings.length > 0 && (
-        <div className="space-y-2">
+        <div>
           {filteredPairings.length === 0 ? (
             <p className="text-center text-zinc-600 text-sm py-8">
               No events in {monthLabel}
             </p>
           ) : (
-            filteredPairings.map((p) => (
-              <PairingCard
-                key={p.pairing_id + p.start_utc}
-                pairing={p}
-                passed={new Date(p.end_utc) < now}
-                expanded={expandedPairing === p.pairing_id + p.start_utc}
-                onToggle={() =>
-                  setExpandedPairing(
-                    expandedPairing === p.pairing_id + p.start_utc
-                      ? null
-                      : p.pairing_id + p.start_utc
-                  )
-                }
-                focusedDate={focusedDate}
-              />
-            ))
+            <div className="relative pl-6">
+              {/* Timeline vertical line */}
+              <div className="absolute left-[7px] top-4 bottom-4 w-px bg-zinc-800" />
+              {filteredPairings.map((p, idx) => {
+                const key = p.pairing_id + p.start_utc;
+                const isPassed = new Date(p.end_utc) < now;
+                return (
+                  <div key={key} className={`relative ${idx > 0 ? "mt-3" : ""}`}>
+                    {/* Timeline node */}
+                    <div className={`absolute -left-6 top-5 w-[15px] h-[15px] rounded-full border-2 ${
+                      isPassed
+                        ? "bg-zinc-800 border-zinc-700"
+                        : "bg-blue-400 border-blue-400/50"
+                    }`} />
+                    <PairingCard
+                      pairing={p}
+                      passed={isPassed}
+                      expanded={expandedPairing === key}
+                      onToggle={() =>
+                        setExpandedPairing(expandedPairing === key ? null : key)
+                      }
+                      focusedDate={focusedDate}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -239,38 +250,42 @@ function PairingCard({
 
   return (
     <div className={`bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden ${passed ? "opacity-40" : ""}`}>
-      {/* Header */}
+      {/* Header — Trip card with bg pattern */}
       <button
         onClick={onToggle}
-        className="w-full p-4 flex items-center justify-between text-left"
+        className="w-full p-4 flex flex-col gap-2 text-left bg-zinc-800/50"
       >
-        <div className="flex items-center gap-3">
-          {passed && (
-            <span className="text-xs bg-zinc-700 text-zinc-500 px-1.5 py-0.5 rounded font-bold">
-              DONE
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {passed && (
+              <span className="text-xs bg-zinc-700 text-zinc-500 px-1.5 py-0.5 rounded font-bold">
+                DONE
+              </span>
+            )}
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded ${getEventTypeColor(
+                pairing.event_type
+              )} text-white`}
+            >
+              {getEventTypeLabel(pairing.event_type)}
             </span>
-          )}
-          <span
-            className={`text-xs font-bold px-2 py-0.5 rounded ${getEventTypeColor(
-              pairing.event_type
-            )} text-white`}
-          >
-            {getEventTypeLabel(pairing.event_type)}
-          </span>
-          <div>
-            <p className="text-sm font-medium">{pairing.summary}</p>
-            <p className="text-xs text-zinc-500">
-              {startDate} - {endDate}
-            </p>
+            <span className="bg-blue-400/20 text-blue-400 text-xs font-bold px-2 py-1 rounded">
+              {pairing.pairing_id}
+            </span>
           </div>
+          <span className="text-xs text-zinc-500 font-medium">{startDate} - {endDate}</span>
         </div>
-        <div className="flex items-center gap-3">
-          {pairing.total_block && (
-            <span className="text-xs text-zinc-500">
-              Blk {pairing.total_block}
-            </span>
-          )}
-          <span className="text-zinc-500 text-sm">{expanded ? "▲" : "▼"}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">{pairing.summary}</p>
+          <div className="flex items-center gap-2">
+            {pairing.total_block && (
+              <div className="flex items-center gap-1 text-xs text-zinc-500">
+                <span className="material-icons text-sm">schedule</span>
+                {pairing.total_block}
+              </div>
+            )}
+            <span className="material-icons text-zinc-500 text-sm">{expanded ? "expand_less" : "expand_more"}</span>
+          </div>
         </div>
       </button>
 
@@ -283,7 +298,7 @@ function PairingCard({
             <div
               key={di}
               id={`day-${day.flight_date}`}
-              className={`mt-3 ${dayPassed ? "opacity-40" : ""} ${
+              className={`mt-3 ${di > 0 ? "pt-4 border-t border-zinc-800" : ""} ${dayPassed ? "opacity-40" : ""} ${
                 focusedDate === day.flight_date
                   ? calendarTheme.focusRing
                   : ""
@@ -310,21 +325,23 @@ function PairingCard({
                 )}
               </div>
 
-              {/* Flight Legs */}
+              {/* Flight Legs — Flight Card style */}
               {day.legs.map((leg, li) => (
                 <div
                   key={li}
-                  className={`ml-2 pl-3 border-l-2 ${
-                    leg.is_deadhead ? "border-zinc-700" : "border-blue-600"
-                  } py-3`}
+                  className={`bg-zinc-800/50 rounded-lg p-3 border-l-4 ${
+                    leg.is_deadhead ? "border-zinc-700" : "border-blue-400"
+                  } mt-2`}
                 >
-                  <div className="flex items-center justify-between">
+                  {/* Top Row: Flight No & Aircraft */}
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-mono font-bold text-blue-400">
+                      <span className="material-icons text-blue-400 text-sm">flight_takeoff</span>
+                      <span className="text-base font-bold">
                         {leg.flight_number}
                       </span>
                       {leg.ac_type && (
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs font-mono text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
                           {leg.ac_type}
                         </span>
                       )}
@@ -339,55 +356,52 @@ function PairingCard({
                         href={`https://flightaware.com/live/flight/${leg.tail_number}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-amber-400 hover:text-amber-300 font-mono"
+                        className="text-xs font-mono font-medium text-amber-400 bg-amber-900/20 px-1.5 py-0.5 rounded border border-amber-900/30"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {leg.tail_number} {"\u2197"}
                       </a>
                     )}
                   </div>
-                  {/* Line 1: Airport codes + block time */}
-                  <div className="flex items-center gap-2 mt-2 text-base">
-                    <span className="font-bold">{leg.origin}</span>
-                    <span className="text-zinc-600">→</span>
-                    <span className="font-bold">{leg.destination}</span>
-                    {leg.block_time && (
-                      <span className="text-xs text-zinc-600 ml-auto">
-                        {leg.block_time}
-                      </span>
-                    )}
-                  </div>
-                  {/* Line 2: Times with timezone + UTC */}
-                  <div className="flex items-center gap-2 mt-0.5 text-sm text-zinc-500">
-                    <span>
-                      {leg.depart_local}
-                      {leg.depart_tz && (
-                        <span className="text-zinc-600 text-xs ml-0.5">{leg.depart_tz}</span>
-                      )}
+                  {/* Route & Times — horizontal layout */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-left">
+                      <div className="text-xl font-bold">{leg.origin}</div>
+                      <div className="text-sm font-mono text-blue-400">{leg.depart_local}</div>
                       {leg.depart_utc && (
-                        <span className="text-zinc-600 text-xs ml-0.5">({utcHHMM(leg.depart_utc)}Z)</span>
+                        <div className="text-[10px] text-zinc-500">{utcHHMM(leg.depart_utc)}Z</div>
                       )}
-                    </span>
-                    <span className="text-zinc-700">→</span>
-                    <span>
-                      {leg.arrive_local}
-                      {leg.arrive_tz && (
-                        <span className="text-zinc-600 text-xs ml-0.5">{leg.arrive_tz}</span>
+                    </div>
+                    <div className="flex-1 px-3 flex flex-col items-center">
+                      {leg.block_time && (
+                        <span className="text-xs text-zinc-500 mb-1">{leg.block_time}</span>
                       )}
+                      <div className="w-full h-px bg-zinc-700 relative flex items-center">
+                        <span className="material-icons text-zinc-500 text-xs rotate-90 absolute left-1/2 -translate-x-1/2 bg-zinc-800 px-1">flight</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold">{leg.destination}</div>
+                      <div className="text-sm font-mono text-blue-400">{leg.arrive_local}</div>
                       {leg.arrive_utc && (
-                        <span className="text-zinc-600 text-xs ml-0.5">({utcHHMM(leg.arrive_utc)}Z)</span>
+                        <div className="text-[10px] text-zinc-500">{utcHHMM(leg.arrive_utc)}Z</div>
                       )}
-                    </span>
+                    </div>
                   </div>
+                  {/* Crew pills */}
                   {leg.crew.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-zinc-700/50">
                       {leg.crew.map((c, ci) => (
-                        <span
+                        <div
                           key={ci}
-                          className="text-xs bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded"
+                          className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded-full border border-zinc-700"
                         >
-                          {c.position}: {c.name}
-                        </span>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            c.position === "CA" ? "bg-emerald-500" : "bg-blue-400"
+                          }`}></span>
+                          <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wide">{c.position}</span>
+                          <span className="text-xs text-zinc-200">{c.name}</span>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -396,44 +410,57 @@ function PairingCard({
 
               {/* Layover */}
               {day.layover?.hotel_name && (
-                <div className="ml-2 pl-3 border-l-2 border-purple-600 py-3 mt-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-purple-400">🏨</span>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.layover.hotel_name)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-zinc-300 hover:text-purple-300 underline underline-offset-2 decoration-zinc-600"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {day.layover.hotel_name}
-                    </a>
+                <div className="bg-zinc-800/30 rounded-lg p-3 border border-zinc-700/50 mt-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="material-icons text-zinc-400 text-sm">hotel</span>
+                    <span className="text-sm font-semibold">Layover</span>
+                    {day.layover.layover_duration && (
+                      <span className="text-xs font-mono text-zinc-500 bg-zinc-800 px-1.5 rounded">{day.layover.layover_duration}</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    {day.layover.hotel_phone && (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.layover.hotel_name)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-zinc-200 hover:text-blue-400 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {day.layover.hotel_name}
+                  </a>
+                  {day.layover.hotel_phone && (
+                    <div className="mt-1">
                       <a
                         href={`tel:${day.layover.hotel_phone.replace(/[^\d]/g, "")}`}
-                        className="text-xs text-blue-400"
+                        className="text-xs text-blue-400 flex items-center gap-1"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <span className="material-icons text-xs">phone</span>
                         {day.layover.hotel_phone}
                       </a>
-                    )}
-                    {day.layover.layover_duration && (
-                      <span className="text-xs text-zinc-500">
-                        Layover: {day.layover.layover_duration}
-                      </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Day Summary */}
+              {/* Day Summary — grid */}
               {day.duty_time && (
-                <div className="ml-2 mt-1 flex gap-3 text-xs text-zinc-600">
-                  {day.day_block && <span>Block: {day.day_block}</span>}
-                  {day.day_credit && <span>Credit: {day.day_credit}</span>}
-                  <span>Duty: {day.duty_time}</span>
+                <div className="grid grid-cols-3 gap-2 mt-3 text-center divide-x divide-zinc-700/50">
+                  {day.day_block && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Block</div>
+                      <div className="text-sm font-bold">{day.day_block}</div>
+                    </div>
+                  )}
+                  {day.day_credit && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Credit</div>
+                      <div className="text-sm font-bold">{day.day_credit}</div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Duty</div>
+                    <div className="text-sm font-bold">{day.duty_time}</div>
+                  </div>
                 </div>
               )}
             </div>

@@ -52,18 +52,18 @@ export default function DualTimeBar() {
   return (
     <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-2 bg-zinc-900/95 backdrop-blur border-b border-zinc-800 text-xs font-mono">
       <div className="flex items-center gap-2">
-        <span className="text-zinc-500">UTC</span>
+        <span className="material-icons text-zinc-500 text-sm">schedule</span>
         <span className="text-emerald-400 font-bold text-sm">{utc}</span>
         <span className="text-zinc-600">{utcDate}</span>
       </div>
       <div className="flex items-center gap-2">
         {countdown ? (
-          <>
-            <span className="text-zinc-500">Report in</span>
+          <div className="flex items-center gap-2 bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700">
+            <span className="text-zinc-400 text-xs font-medium uppercase tracking-wider">Report In</span>
             <span className="text-amber-400 font-bold text-sm">
               {countdown}
             </span>
-          </>
+          </div>
         ) : (
           <>
             <span className="text-zinc-500">LCL</span>

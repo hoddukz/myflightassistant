@@ -291,11 +291,13 @@ export default function Dashboard() {
                     <p className="text-2xl font-bold">{nextFlight.leg.origin}</p>
                     <p className="text-sm text-zinc-500">{nextFlight.leg.depart_local}</p>
                   </div>
-                  <div className="flex-1 mx-4 flex flex-col items-center">
+                  <div className="flex-1 mx-4 flex flex-col items-center relative">
                     <span className="text-blue-400 font-mono text-sm font-bold">
                       {nextFlight.leg.flight_number}
                     </span>
-                    <div className="w-full border-t border-dashed border-zinc-700 mt-1" />
+                    <div className="w-full h-px bg-zinc-700 mt-1 relative">
+                      <span className="material-icons text-blue-400 text-sm rotate-90 absolute left-1/2 -translate-x-1/2 -top-2 bg-zinc-900 px-0.5">flight</span>
+                    </div>
                     {nextFlight.leg.ac_type && (
                       <span className="text-xs text-zinc-600 mt-1">{nextFlight.leg.ac_type}</span>
                     )}
@@ -417,7 +419,10 @@ export default function Dashboard() {
                       <p className="text-xl font-bold">{leg.origin}</p>
                       <p className="text-sm text-zinc-500">{leg.depart_local}</p>
                     </div>
-                    <div className="flex-1 mx-4 border-t border-dashed border-zinc-700" />
+                    <div className="flex-1 mx-4 relative">
+                      <div className="h-px bg-zinc-700 w-full"></div>
+                      <span className="material-icons text-zinc-500 text-xs rotate-90 absolute left-1/2 -translate-x-1/2 -top-2 bg-zinc-900 px-0.5">flight</span>
+                    </div>
                     <div className="text-center">
                       <p className="text-xl font-bold">{leg.destination}</p>
                       <p className="text-sm text-zinc-500">{leg.arrive_local}</p>

@@ -13,7 +13,8 @@ import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow, uploadICS,
 import type { ScheduleResponse } from "@/types";
 import { toUtcDate } from "@/lib/utils";
 
-type SettingsView = "main" | "schedule" | "utilities";
+type SettingsView = "main" | "schedule" | "utilities" | "notifications";
+type PushStatus = "loading" | "enabled" | "disabled" | "unsupported";
 
 /* ── Calendar Sync Section ── */
 function CalendarSyncSection() {
@@ -117,14 +118,19 @@ function CalendarSyncSection() {
       </p>
 
       <div className="flex gap-2">
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://calendar.google.com/...basic.ics"
-          className="flex-1 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600"
-          disabled={loading || syncing}
-        />
+        <div className="flex-1 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <span className="material-icons text-zinc-500 text-lg">link</span>
+          </div>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://calendar.google.com/...basic.ics"
+            className="w-full bg-zinc-800 rounded-lg pl-10 pr-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600"
+            disabled={loading || syncing}
+          />
+        </div>
         <button
           onClick={handleSave}
           disabled={loading || syncing || !url.trim()}
@@ -240,7 +246,7 @@ function ScheduleManageTab() {
         className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
           dragOver
             ? "border-blue-400 bg-blue-400/10"
-            : "border-zinc-700 hover:border-zinc-500"
+            : "border-blue-400/40 bg-blue-400/5 hover:bg-blue-400/10"
         }`}
       >
         <input
@@ -253,13 +259,16 @@ function ScheduleManageTab() {
         />
         <label
           htmlFor="schedule-upload"
-          className="cursor-pointer flex flex-col items-center gap-3"
+          className="cursor-pointer flex flex-col items-center gap-3 group"
         >
-          <span className="text-3xl">{uploading ? "..." : "\u{1F4E4}"}</span>
-          <span className="text-sm text-zinc-400">
-            {uploading
-              ? "Parsing schedule..."
-              : "Drop .ics or .csv file here, or tap to browse"}
+          <div className="w-10 h-10 rounded-full bg-blue-400/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <span className="material-icons text-blue-400">{uploading ? "hourglass_empty" : "cloud_upload"}</span>
+          </div>
+          <span className="text-sm font-medium">
+            {uploading ? "Parsing schedule..." : "Import Roster"}
+          </span>
+          <span className="text-xs text-zinc-500">
+            {uploading ? "" : "Tap or drop .ics / .csv file"}
           </span>
         </label>
       </div>
@@ -431,7 +440,6 @@ function NotesTab() {
       if (new Date(p.start_utc).getTime() > nowUtc || new Date(p.end_utc).getTime() < nowUtc) continue;
       for (const d of p.days) {
         for (const leg of d.legs) {
-          // UTC 시간이 없으면 레그 판정 불가 → 스킵
           if (!leg.depart_utc || !leg.arrive_utc) continue;
           const depTime = toUtcDate(leg.depart_utc, d.flight_date);
           const arrAdj = toUtcDate(leg.arrive_utc, d.flight_date);
@@ -552,15 +560,10 @@ function UtilitiesView() {
   );
 }
 
-/* ── Notifications Section ── */
-type PushStatus = "loading" | "enabled" | "disabled" | "unsupported";
-
-function NotificationsSection() {
+/* ── Push Main Row (settings main page) ── */
+function PushMainRow({ onOpenDetail }: { onOpenDetail: () => void }) {
   const [status, setStatus] = useState<PushStatus>("loading");
   const [loading, setLoading] = useState(false);
-  const [testLoading, setTestLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -574,62 +577,114 @@ function NotificationsSection() {
     });
   }, []);
 
-  const handleEnable = async () => {
-    setError(null);
-    setSuccess(null);
+  const handleToggle = async () => {
+    if (status === "loading" || status === "unsupported") return;
     setLoading(true);
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setError("Notification permission denied");
-        setLoading(false);
-        return;
+      if (status === "disabled") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          setLoading(false);
+          return;
+        }
+        const vapidKeyStr = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || await getVapidKey();
+        const padding = "=".repeat((4 - (vapidKeyStr.length % 4)) % 4);
+        const base64 = (vapidKeyStr + padding).replace(/-/g, "+").replace(/_/g, "/");
+        const raw = atob(base64);
+        const vapidKeyBytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) vapidKeyBytes[i] = raw.charCodeAt(i);
+        const reg = await navigator.serviceWorker.ready;
+        const subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: vapidKeyBytes,
+        });
+        await subscribePush(subscription.toJSON());
+        setStatus("enabled");
+      } else {
+        const reg = await navigator.serviceWorker.ready;
+        const subscription = await reg.pushManager.getSubscription();
+        if (subscription) await subscription.unsubscribe();
+        await unsubscribePush();
+        setStatus("disabled");
       }
-
-      const vapidKeyStr = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || await getVapidKey();
-
-      // Safari/iOS requires Uint8Array for applicationServerKey
-      const padding = "=".repeat((4 - (vapidKeyStr.length % 4)) % 4);
-      const base64 = (vapidKeyStr + padding).replace(/-/g, "+").replace(/_/g, "/");
-      const raw = atob(base64);
-      const vapidKeyBytes = new Uint8Array(raw.length);
-      for (let i = 0; i < raw.length; i++) vapidKeyBytes[i] = raw.charCodeAt(i);
-
-      const reg = await navigator.serviceWorker.ready;
-      const subscription = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: vapidKeyBytes,
-      });
-
-      await subscribePush(subscription.toJSON());
-      setStatus("enabled");
-      setSuccess("Push notifications enabled");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to enable notifications");
+    } catch {
+      // silently fail
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDisable = async () => {
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const subscription = await reg.pushManager.getSubscription();
-      if (subscription) {
-        await subscription.unsubscribe();
-      }
-      await unsubscribePush();
-      setStatus("disabled");
-      setSuccess("Push notifications disabled");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to disable notifications");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (status === "unsupported") {
+    return (
+      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-zinc-700/50 flex items-center justify-center">
+            <span className="material-icons text-zinc-500 text-sm">notifications_off</span>
+          </div>
+          <p className="text-sm text-zinc-500">Push not supported in this browser</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
+      {/* Push toggle row */}
+      <div className="p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center">
+            <span className="material-icons text-orange-400 text-sm">notifications</span>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Push Notifications</p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {status === "loading" ? "Loading..." : status === "enabled" ? "Enabled" : "Disabled"}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={loading || status === "loading"}
+          className={`relative w-11 h-6 rounded-full transition-colors ${
+            status === "enabled" ? "bg-blue-600" : "bg-zinc-700"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              status === "enabled" ? "translate-x-5" : ""
+            }`}
+          />
+        </button>
+      </div>
+      {/* Notification settings → sub-view */}
+      {status === "enabled" && (
+        <button
+          onClick={onOpenDetail}
+          className="w-full p-4 flex items-center justify-between active:bg-zinc-800 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <span className="material-icons text-blue-400 text-sm">tune</span>
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium">Notification Settings</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Weather, reminders, test push</p>
+            </div>
+          </div>
+          <span className="material-icons text-zinc-600 text-lg">chevron_right</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Notifications Detail View ── */
+function NotificationsDetailView() {
+  const [testLoading, setTestLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const weatherAlerts = useSettingsStore((s) => s.weatherAlerts);
+  const setWeatherAlerts = useSettingsStore((s) => s.setWeatherAlerts);
 
   const handleTest = async () => {
     setError(null);
@@ -645,73 +700,64 @@ function NotificationsSection() {
     }
   };
 
-  if (status === "loading") {
-    return (
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Notifications</p>
-        <p className="text-xs text-zinc-500 mt-1">Loading...</p>
-      </div>
-    );
-  }
-
-  if (status === "unsupported") {
-    return (
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-        <p className="text-sm font-medium">Notifications</p>
-        <p className="text-xs text-zinc-500 mt-1">Push notifications are not supported in this browser</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
-      <div>
-        <p className="text-sm font-medium">Notifications</p>
-        <p className="text-xs text-zinc-500 mt-1">Receive push alerts for schedule events</p>
+    <div className="space-y-4">
+      {/* Test Push */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <span className="material-icons text-blue-400 text-sm">send</span>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Test Notification</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Send a test push to verify setup</p>
+          </div>
+        </div>
+        <button
+          onClick={handleTest}
+          disabled={testLoading}
+          className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
+        >
+          {testLoading ? "Sending..." : "Send Test Push"}
+        </button>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        {success && <p className="text-xs text-green-400">{success}</p>}
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${status === "enabled" ? "bg-green-500" : "bg-zinc-600"}`} />
-          <span className="text-xs text-zinc-400">
-            {status === "enabled" ? "Enabled" : "Disabled"}
-          </span>
+      {/* Alert Types */}
+      <div className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1">Alert Types</h2>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
+          {/* Weather Alerts */}
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                <span className="material-icons text-amber-400 text-sm">cloud</span>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Weather Alerts</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Significant weather changes</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setWeatherAlerts(!weatherAlerts)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                weatherAlerts ? "bg-blue-600" : "bg-zinc-700"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                  weatherAlerts ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+          </div>
+          {/* Pre-departure Reminder */}
+          <div className="p-4">
+            <ReminderSection />
+          </div>
         </div>
       </div>
-
-      <div className="flex gap-2">
-        {status === "disabled" ? (
-          <button
-            onClick={handleEnable}
-            disabled={loading}
-            className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {loading ? "Enabling..." : "Enable"}
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={handleTest}
-              disabled={testLoading || loading}
-              className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
-            >
-              {testLoading ? "Sending..." : "Test Push"}
-            </button>
-            <button
-              onClick={handleDisable}
-              disabled={loading}
-              className="px-4 py-2 border border-red-400/30 text-red-400 hover:bg-red-400/10 disabled:opacity-50 text-sm font-medium rounded-lg transition-colors"
-            >
-              {loading ? "..." : "Disable"}
-            </button>
-          </>
-        )}
-      </div>
-
-      {error && <p className="text-xs text-red-400">{error}</p>}
-      {success && <p className="text-xs text-green-400">{success}</p>}
-
-      {status === "enabled" && <ReminderSection />}
     </div>
   );
 }
@@ -730,7 +776,6 @@ function ReminderSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // 초기 로드
   useEffect(() => {
     getReminderSettings()
       .then((data) => {
@@ -741,14 +786,13 @@ function ReminderSection() {
       .finally(() => setLoading(false));
   }, []);
 
-  // 변경 시 자동 저장
   const save = useCallback(
     async (newEnabled: boolean, newMinutes: number[]) => {
       setSaving(true);
       try {
         await saveReminderSettings(newEnabled, newMinutes);
       } catch {
-        // 실패 시 무시 (다음 변경 시 재시도)
+        // 실패 시 무시
       } finally {
         setSaving(false);
       }
@@ -800,20 +844,21 @@ function ReminderSection() {
   };
 
   if (loading) {
-    return (
-      <div className="border-t border-zinc-700 pt-3 mt-3">
-        <p className="text-xs text-zinc-500">Loading reminder settings...</p>
-      </div>
-    );
+    return <p className="text-xs text-zinc-500">Loading reminder settings...</p>;
   }
 
   return (
-    <div className="border-t border-zinc-700 pt-3 mt-3 space-y-3">
-      {/* 마스터 토글 */}
+    <div className="space-y-3">
+      {/* Master toggle */}
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">Report Reminder</p>
-          <p className="text-xs text-zinc-500">Get notified before report time</p>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center">
+            <span className="material-icons text-purple-400 text-sm">alarm</span>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Pre-departure Reminder</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Get notified before report time</p>
+          </div>
         </div>
         <button
           onClick={toggleEnabled}
@@ -832,17 +877,17 @@ function ReminderSection() {
 
       {enabled && (
         <>
-          {/* 프리셋 체크박스 */}
+          {/* Preset pills */}
           <div className="flex gap-2">
             {PRESETS.map((p) => (
               <button
                 key={p.minutes}
                 onClick={() => togglePreset(p.minutes)}
                 disabled={saving}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 rounded-full text-xs font-medium transition-colors ${
                   selected.includes(p.minutes)
-                    ? "bg-blue-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    ? "bg-blue-400 text-white border border-blue-400"
+                    : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-zinc-200"
                 }`}
               >
                 {p.label}
@@ -850,7 +895,7 @@ function ReminderSection() {
             ))}
           </div>
 
-          {/* 커스텀 입력 */}
+          {/* Custom input */}
           <div className="flex gap-2">
             <input
               type="number"
@@ -872,7 +917,7 @@ function ReminderSection() {
             </button>
           </div>
 
-          {/* 선택된 항목 칩 */}
+          {/* Selected chips */}
           {selected.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {selected.map((m) => (
@@ -902,10 +947,10 @@ function ReminderSection() {
 }
 
 /* ── Theme Toggle ── */
-const themeOptions: { value: Theme; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "auto", label: "Auto" },
-  { value: "dark", label: "Dark" },
+const themeOptions: { value: Theme; label: string; icon: string }[] = [
+  { value: "light", label: "Light", icon: "light_mode" },
+  { value: "auto", label: "Auto", icon: "brightness_auto" },
+  { value: "dark", label: "Dark", icon: "dark_mode" },
 ];
 
 function ThemeToggle() {
@@ -913,20 +958,19 @@ function ThemeToggle() {
   const setTheme = useSettingsStore((s) => s.setTheme);
 
   return (
-    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-      <p className="text-sm font-medium">Theme</p>
-      <p className="text-xs text-zinc-500 mt-1 mb-3">Switch between dark and light mode</p>
-      <div className="flex gap-2">
+    <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-1">
+      <div className="grid grid-cols-3 gap-1 bg-zinc-800 rounded-lg p-1">
         {themeOptions.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setTheme(opt.value)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center justify-center py-2 text-xs font-medium rounded-md transition-all ${
               theme === opt.value
-                ? "bg-blue-600 text-white"
-                : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-900 text-blue-400 shadow-sm ring-1 ring-white/10"
+                : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
+            <span className="material-icons text-base mr-1">{opt.icon}</span>
             {opt.label}
           </button>
         ))}
@@ -943,9 +987,7 @@ function SubViewHeader({ title, onBack }: { title: string; onBack: () => void })
         onClick={onBack}
         className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
+        <span className="material-icons text-lg">chevron_left</span>
       </button>
       <h1 className="text-xl font-bold">{title}</h1>
     </div>
@@ -960,84 +1002,118 @@ export default function SettingsPage() {
   const [view, setView] = useState<SettingsView>("main");
 
   return (
-    <div className="flex flex-col min-h-[calc(100dvh-5rem)]">
-      <div className="flex-1 space-y-4">
-        {view === "main" && (
-          <>
-            <div className="pt-2">
-              <h1 className="text-xl font-bold">Settings</h1>
-            </div>
+    <div className="space-y-6">
+      {view === "main" && (
+        <>
+          <div className="pt-2">
+            <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+          </div>
 
-            <div className="space-y-2">
-              {/* Schedule Management */}
+          {/* Account Section (Top) */}
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1">Account</h2>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
+              {user && (
+                <div className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center shrink-0">
+                    <span className="text-sm font-bold text-zinc-200">
+                      {user.email?.charAt(0).toUpperCase() || "U"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{user.email}</p>
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={async () => {
+                  await signOut();
+                  router.replace("/login");
+                }}
+                className="w-full p-4 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2"
+              >
+                <span className="material-icons text-lg">logout</span>
+                Sign Out
+              </button>
+            </div>
+          </div>
+
+          {/* Schedule Management */}
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1">Schedule Management</h2>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
               <button
                 onClick={() => setView("schedule")}
-                className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-800 flex items-center justify-between active:bg-zinc-800 transition-colors"
+                className="w-full p-4 flex items-center justify-between active:bg-zinc-800 transition-colors"
               >
-                <div className="text-left">
-                  <p className="text-sm font-medium">Schedule Management</p>
-                  <p className="text-xs text-zinc-500 mt-1">Upload, sync, and manage schedule</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <span className="material-icons text-blue-400 text-sm">cloud_upload</span>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Upload & Sync</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">Import roster, sync calendar</p>
+                  </div>
                 </div>
-                <span className="text-zinc-600 text-sm">{"\u203A"}</span>
+                <span className="material-icons text-zinc-600 text-lg">chevron_right</span>
               </button>
-
-              {/* Utilities */}
               <button
                 onClick={() => setView("utilities")}
-                className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-800 flex items-center justify-between active:bg-zinc-800 transition-colors"
+                className="w-full p-4 flex items-center justify-between active:bg-zinc-800 transition-colors"
               >
-                <div className="text-left">
-                  <p className="text-sm font-medium">Utilities</p>
-                  <p className="text-xs text-zinc-500 mt-1">Unit converter, flight notes</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <span className="material-icons text-blue-400 text-sm">calculate</span>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Utilities</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">Unit converter, flight notes</p>
+                  </div>
                 </div>
-                <span className="text-zinc-600 text-sm">{"\u203A"}</span>
+                <span className="material-icons text-zinc-600 text-lg">chevron_right</span>
               </button>
-
-              {/* Notifications */}
-              <NotificationsSection />
-
-              {/* Theme */}
-              <ThemeToggle />
-
-              {/* Version */}
-              <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-                <p className="text-sm font-medium">Version</p>
-                <p className="text-xs text-zinc-500 mt-1">MFA v1.0.0</p>
-              </div>
             </div>
-          </>
-        )}
+          </div>
 
-        {view === "schedule" && (
-          <>
-            <SubViewHeader title="Schedule" onBack={() => setView("main")} />
-            <ScheduleManageTab />
-          </>
-        )}
+          {/* Notifications */}
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1">Notifications</h2>
+            <PushMainRow onOpenDetail={() => setView("notifications")} />
+          </div>
 
-        {view === "utilities" && (
-          <>
-            <SubViewHeader title="Utilities" onBack={() => setView("main")} />
-            <UtilitiesView />
-          </>
-        )}
-      </div>
+          {/* Appearance */}
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 px-1">Appearance</h2>
+            <ThemeToggle />
+          </div>
 
-      {/* Account - always at bottom */}
-      <div className="pt-4 pb-2 space-y-3">
-        {user && (
-          <p className="text-xs text-zinc-600 text-center">{user.email}</p>
-        )}
-        <button
-          onClick={async () => {
-            await signOut();
-            router.replace("/login");
-          }}
-          className="w-full bg-zinc-900 border border-zinc-800 text-red-400 hover:bg-zinc-800 text-sm font-medium py-3 rounded-xl transition-colors"
-        >
-          Sign Out
-        </button>
-      </div>
+          {/* Version */}
+          <div className="py-2">
+            <p className="text-xs text-zinc-500 text-center">MFA v1.0.0</p>
+          </div>
+        </>
+      )}
+
+      {view === "schedule" && (
+        <>
+          <SubViewHeader title="Schedule" onBack={() => setView("main")} />
+          <ScheduleManageTab />
+        </>
+      )}
+
+      {view === "utilities" && (
+        <>
+          <SubViewHeader title="Utilities" onBack={() => setView("main")} />
+          <UtilitiesView />
+        </>
+      )}
+
+      {view === "notifications" && (
+        <>
+          <SubViewHeader title="Notifications" onBack={() => setView("main")} />
+          <NotificationsDetailView />
+        </>
+      )}
     </div>
   );
 }
