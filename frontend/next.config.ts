@@ -24,9 +24,11 @@ function loadRootEnv(): Record<string, string> {
   }
 }
 
+const rootEnv = loadRootEnv();
+
 const nextConfig: NextConfig = {
   output: "standalone",
-  env: loadRootEnv(),
+  ...(Object.keys(rootEnv).length > 0 ? { env: rootEnv } : {}),
   async rewrites() {
     const backend = process.env.BACKEND_URL || "http://localhost:8000";
     return [
