@@ -145,9 +145,17 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
       <div className="w-full max-w-sm space-y-6">
         {/* Header */}
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">MFA</h1>
-          <p className="text-sm text-zinc-500">My Flight Assistant</p>
+        <div className="flex flex-col items-center space-y-4">
+          <svg className="w-20 h-20 drop-shadow-2xl" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="48" fill="none" stroke="#1e293b" strokeWidth="1" />
+            <path d="M 20 65 L 45 65 L 65 35 L 85 35" fill="none" stroke="#258cf4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+            <path d="M 45 65 L 55 80 L 75 80" fill="none" stroke="#005f9e" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+            <circle cx="85" cy="35" r="3" fill="#ffffff" />
+          </svg>
+          <div className="text-center space-y-1">
+            <h1 className="text-3xl font-mono font-bold tracking-tighter text-foreground">MFA</h1>
+            <p className="text-xs font-medium text-zinc-500 tracking-widest uppercase">Personal Briefing Assistant</p>
+          </div>
         </div>
 
         {/* Mode Title */}
