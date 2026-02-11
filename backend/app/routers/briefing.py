@@ -1,6 +1,8 @@
 # Tag: core
 # Path: /Users/hodduk/Documents/git/mfa/backend/app/routers/briefing.py
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services.airport import get_airport, get_coordinates, iata_to_icao
@@ -16,8 +18,10 @@ async def get_weather(station: str):
     airport = get_airport(station.upper())
     icao = iata_to_icao(station) or station.upper()
 
-    metar = await fetch_metar(station)
-    taf = await fetch_taf(station)
+    metar, taf = await asyncio.gather(
+        fetch_metar(station),
+        fetch_taf(station),
+    )
 
     return {
         "station": station.upper(),
@@ -65,24 +69,15 @@ async def get_full_briefing(station: str):
     airport = get_airport(station.upper())
     icao = iata_to_icao(station) or station.upper()
 
-    metar = None
-    taf = None
-    notams = []
-
-    try:
-        metar = await fetch_metar(station)
-    except Exception:
-        pass
-
-    try:
-        taf = await fetch_taf(station)
-    except Exception:
-        pass
-
-    try:
-        notams = await fetch_notams(station)
-    except Exception:
-        pass
+    results = await asyncio.gather(
+        fetch_metar(station),
+        fetch_taf(station),
+        fetch_notams(station),
+        return_exceptions=True,
+    )
+    metar = results[0] if not isinstance(results[0], Exception) else None
+    taf = results[1] if not isinstance(results[1], Exception) else None
+    notams = results[2] if not isinstance(results[2], Exception) else []
 
     return {
         "station": station.upper(),
@@ -137,20 +132,28 @@ async def get_route_briefing(
     destination: str = Query(..., description="도착 공항 IATA/ICAO"),
 ):
     """출발/도착 공항의 기상 + NOTAM을 동시에 조회한다."""
-    origin_data = {
-        "metar": await fetch_metar(origin),
-        "taf": await fetch_taf(origin),
-        "notams": await fetch_notams(origin),
-        "airport": get_airport(origin.upper()),
-    }
-    dest_data = {
-        "metar": await fetch_metar(destination),
-        "taf": await fetch_taf(destination),
-        "notams": await fetch_notams(destination),
-        "airport": get_airport(destination.upper()),
-    }
+    o_metar, o_taf, o_notams, d_metar, d_taf, d_notams = await asyncio.gather(
+        fetch_metar(origin),
+        fetch_taf(origin),
+        fetch_notams(origin),
+        fetch_metar(destination),
+        fetch_taf(destination),
+        fetch_notams(destination),
+    )
 
     return {
-        "origin": {"station": origin.upper(), **origin_data},
-        "destination": {"station": destination.upper(), **dest_data},
+        "origin": {
+            "station": origin.upper(),
+            "metar": o_metar,
+            "taf": o_taf,
+            "notams": o_notams,
+            "airport": get_airport(origin.upper()),
+        },
+        "destination": {
+            "station": destination.upper(),
+            "metar": d_metar,
+            "taf": d_taf,
+            "notams": d_notams,
+            "airport": get_airport(destination.upper()),
+        },
     }

@@ -316,3 +316,32 @@ export async function saveReminderSettings(
   }
   return safeJson(res);
 }
+
+export async function getWeatherAlertSettings(): Promise<{
+  weather_alerts_enabled: boolean;
+}> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/weather-alert-settings`, {
+    headers,
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch weather alert settings");
+  }
+  return safeJson(res);
+}
+
+export async function saveWeatherAlertSettings(
+  enabled: boolean
+): Promise<{ weather_alerts_enabled: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/push/weather-alert-settings`, {
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ weather_alerts_enabled: enabled }),
+  });
+  if (!res.ok) {
+    const error = await safeJson(res);
+    throw new Error(error?.detail || "Failed to save weather alert settings");
+  }
+  return safeJson(res);
+}

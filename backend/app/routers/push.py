@@ -87,6 +87,53 @@ async def send_test_push(
     return {"status": "sent"}
 
 
+class WeatherAlertSettingsPayload(BaseModel):
+    weather_alerts_enabled: bool
+
+
+@router.get("/weather-alert-settings")
+async def get_weather_alert_settings(
+    current_user: dict = Depends(get_current_user),
+):
+    """현재 유저의 weather alert 설정을 조회한다."""
+    user_id = current_user["id"]
+    db = get_supabase()
+
+    result = db.table("users").select("settings").eq("id", user_id).execute()
+    row = result.data[0] if result.data else None
+    settings = (row.get("settings") or {}) if row else {}
+
+    return {
+        "weather_alerts_enabled": settings.get("weather_alerts_enabled", True),
+    }
+
+
+@router.put("/weather-alert-settings")
+async def save_weather_alert_settings(
+    payload: WeatherAlertSettingsPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """Weather alert 설정을 users.settings JSONB에 저장한다."""
+    user_id = current_user["id"]
+    db = get_supabase()
+
+    result = db.table("users").select("settings").eq("id", user_id).execute()
+    row = result.data[0] if result.data else None
+    settings = (row.get("settings") or {}) if row else {}
+
+    settings["weather_alerts_enabled"] = payload.weather_alerts_enabled
+
+    if row:
+        db.table("users").update({"settings": settings}).eq("id", user_id).execute()
+    else:
+        email = current_user.get("email", "")
+        db.table("users").insert({"id": user_id, "email": email, "settings": settings}).execute()
+
+    return {
+        "weather_alerts_enabled": settings["weather_alerts_enabled"],
+    }
+
+
 class ReminderSettingsPayload(BaseModel):
     reminder_enabled: bool
     reminder_minutes: list[int]

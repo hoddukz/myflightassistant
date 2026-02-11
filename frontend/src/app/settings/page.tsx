@@ -9,7 +9,7 @@ import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore, type Theme } from "@/stores/settingsStore";
-import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow, uploadICS, uploadCSV, deleteSchedule, getVapidKey, subscribePush, unsubscribePush, sendTestPush, getReminderSettings, saveReminderSettings } from "@/lib/api";
+import { saveCalendarUrl, getCalendarUrl, deleteCalendarUrl, syncNow, uploadICS, uploadCSV, deleteSchedule, getVapidKey, subscribePush, unsubscribePush, sendTestPush, getReminderSettings, saveReminderSettings, getWeatherAlertSettings, saveWeatherAlertSettings } from "@/lib/api";
 import type { ScheduleResponse } from "@/types";
 import { toUtcDate } from "@/lib/utils";
 
@@ -712,6 +712,7 @@ function NotificationsSection() {
       {success && <p className="text-xs text-green-400">{success}</p>}
 
       {status === "enabled" && <ReminderSection />}
+      {status === "enabled" && <WeatherAlertSection />}
     </div>
   );
 }
@@ -896,6 +897,72 @@ function ReminderSection() {
             <p className="text-xs text-zinc-500">Maximum 5 reminders</p>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/* ── Weather Alert Section ── */
+function WeatherAlertSection() {
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getWeatherAlertSettings()
+      .then((data) => {
+        setEnabled(data.weather_alerts_enabled);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setEnabled(next);
+    setSaving(true);
+    try {
+      await saveWeatherAlertSettings(next);
+    } catch {
+      setEnabled(!next);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="border-t border-zinc-700 pt-3 mt-3">
+        <p className="text-xs text-zinc-500">Loading weather alert settings...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-zinc-700 pt-3 mt-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">Weather Alerts</p>
+          <p className="text-xs text-zinc-500">Get notified for hazardous weather before departure</p>
+        </div>
+        <button
+          onClick={toggle}
+          disabled={saving}
+          className={`relative w-11 h-6 rounded-full transition-colors ${
+            enabled ? "bg-blue-600" : "bg-zinc-700"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              enabled ? "translate-x-5" : ""
+            }`}
+          />
+        </button>
+      </div>
+      {enabled && (
+        <p className="text-xs text-zinc-500 mt-2">
+          Monitors IFR/LIFR, thunderstorms, icing, strong winds, and low visibility for flights departing within 3 hours.
+        </p>
       )}
     </div>
   );

@@ -12,6 +12,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 from app.routers import schedule, briefing, flight, push
 from app.services.reminder_scheduler import start_scheduler, stop_scheduler
+from app.services.weather_alert_scheduler import start_weather_scheduler, stop_weather_scheduler
 
 app = FastAPI(
     title="MFA API",
@@ -38,11 +39,13 @@ app.include_router(push.router, prefix="/api/push", tags=["push"])
 @app.on_event("startup")
 async def on_startup():
     start_scheduler()
+    start_weather_scheduler()
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
     stop_scheduler()
+    stop_weather_scheduler()
 
 
 @app.get("/health")
