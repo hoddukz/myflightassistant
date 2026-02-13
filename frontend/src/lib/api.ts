@@ -337,17 +337,26 @@ export async function fetchFlightTrack({
   flight_number,
   provider,
   destination,
+  origin,
+  scheduled_dep,
+  scheduled_arr,
 }: {
   tail_number?: string;
   flight_number?: string;
   provider?: string;
   destination?: string;
+  origin?: string;
+  scheduled_dep?: string;
+  scheduled_arr?: string;
 }) {
   const params = new URLSearchParams();
   if (tail_number) params.set("tail_number", tail_number);
   if (flight_number) params.set("flight_number", flight_number);
   if (provider) params.set("provider", provider);
   if (destination) params.set("destination", destination);
+  if (origin) params.set("origin", origin);
+  if (scheduled_dep) params.set("scheduled_dep", scheduled_dep);
+  if (scheduled_arr) params.set("scheduled_arr", scheduled_arr);
 
   const res = await fetch(`${API_BASE}/api/flight/track?${params.toString()}`);
   if (!res.ok) {

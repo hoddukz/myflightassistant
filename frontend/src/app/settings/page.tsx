@@ -4,7 +4,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useNotesStore, type Note } from "@/stores/notesStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -1016,9 +1016,14 @@ function SubViewHeader({ title, onBack }: { title: string; onBack: () => void })
 /* ── Main Page ── */
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const signOut = useAuthStore((s) => s.signOut);
   const user = useAuthStore((s) => s.user);
-  const [view, setView] = useState<SettingsView>("main");
+  const [view, setView] = useState<SettingsView>(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "schedule") return "schedule";
+    return "main";
+  });
 
   return (
     <div className="space-y-6">

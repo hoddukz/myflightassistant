@@ -4,9 +4,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { fetchFar117Status } from "@/lib/api";
 import type { Far117Status } from "@/types";
-import FdpCalculatorModal from "./FdpCalculatorModal";
 
 interface Props {
   hasPairings: boolean;
@@ -15,7 +15,6 @@ interface Props {
 export default function Far117Card({ hasPairings }: Props) {
   const [status, setStatus] = useState<Far117Status | null>(null);
   const [loading, setLoading] = useState(false);
-  const [calcOpen, setCalcOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!hasPairings) return;
@@ -34,24 +33,20 @@ export default function Far117Card({ hasPairings }: Props) {
     load();
   }, [load]);
 
-  // 스케줄 없으면 계산기만 접근 가능
+  // 스케줄 없으면 Duty 페이지 링크만
   if (!hasPairings) {
     return (
-      <>
+      <Link href="/duty" className="block">
         <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
           <div className="flex items-center justify-between">
             <span className="text-sm text-zinc-400">FAR 117</span>
-            <button
-              onClick={() => setCalcOpen(true)}
-              className="text-xs text-blue-400 hover:text-blue-300 font-medium"
-            >
-              Calculator
-            </button>
+            <span className="text-xs text-blue-400 font-medium">
+              Pickup Simulator {"\u203A"}
+            </span>
           </div>
           <p className="text-xs text-zinc-600 mt-1">Upload schedule to see FDP status</p>
         </div>
-        <FdpCalculatorModal open={calcOpen} onClose={() => setCalcOpen(false)} />
-      </>
+      </Link>
     );
   }
 
@@ -99,8 +94,8 @@ export default function Far117Card({ hasPairings }: Props) {
     : null;
 
   return (
-    <>
-      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
+    <Link href="/duty" className="block">
+      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3 active:bg-zinc-800 transition-colors">
         {/* Header + FDP */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -129,24 +124,12 @@ export default function Far117Card({ hasPairings }: Props) {
           <p className="text-xs text-amber-400">{warnings[0]}</p>
         )}
 
-        {/* 버튼 */}
-        <div className="flex gap-2">
-          <a
-            href="/briefing?tab=far117"
-            className="flex-1 text-center py-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
-          >
-            Details
-          </a>
-          <button
-            onClick={() => setCalcOpen(true)}
-            className="flex-1 text-center py-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
-          >
-            Calculator
-          </button>
+        {/* Tap for more */}
+        <div className="flex justify-between text-xs text-zinc-600">
+          <span>{fdp.legs} legs{fdp.on_duty ? ` \u00B7 Report ${fdp.report_hour_local}:00` : ""}</span>
+          <span>Tap for more {"\u203A"}</span>
         </div>
       </div>
-
-      <FdpCalculatorModal open={calcOpen} onClose={() => setCalcOpen(false)} />
-    </>
+    </Link>
   );
 }

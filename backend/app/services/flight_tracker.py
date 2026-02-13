@@ -11,11 +11,24 @@ from typing import Any, Optional
 
 import httpx
 
+from app.services.flight_phase import (
+    FlightPhaseEstimator,
+    FlightState,
+    Phase,
+    PHASE_DISPLAY,
+    calculate_hybrid_eta,
+    should_simplify_display,
+)
+
 _USER_AGENT = "MFA-MyFlightAssistant/0.1"
 
 # 인메모리 캐시 (TTL 5분) — weather.py 패턴
 _cache: dict[str, tuple[float, Any]] = {}
 _CACHE_TTL = 300  # 5분
+
+# 항공기별 FlightPhaseEstimator 인스턴스 (icao24 키)
+_estimators: dict[str, tuple[float, FlightPhaseEstimator]] = {}
+_ESTIMATOR_TTL = 1800  # 30분 미사용 시 삭제
 
 
 def _get_cached(key: str) -> Any | None:
@@ -29,6 +42,28 @@ def _get_cached(key: str) -> Any | None:
 
 def _set_cache(key: str, data: Any) -> None:
     _cache[key] = (time.time(), data)
+
+
+def _get_estimator(icao24: str, total_distance: float) -> FlightPhaseEstimator:
+    """항공기별 FlightPhaseEstimator 인스턴스를 반환한다. 없으면 생성."""
+    now = time.time()
+    if icao24 in _estimators:
+        ts, est = _estimators[icao24]
+        # total_distance가 크게 바뀌면 새로 생성 (다른 비행)
+        if abs(est.total_dist - total_distance) < 50:
+            _estimators[icao24] = (now, est)
+            return est
+    est = FlightPhaseEstimator(total_distance)
+    _estimators[icao24] = (now, est)
+    return est
+
+
+def _cleanup_estimators() -> None:
+    """오래된 estimator 인스턴스를 정리한다."""
+    now = time.time()
+    expired = [k for k, (ts, _) in _estimators.items() if now - ts > _ESTIMATOR_TTL]
+    for k in expired:
+        del _estimators[k]
 
 
 def _get_flightlabs_key() -> str | None:
@@ -139,16 +174,29 @@ async def track_inbound(
     flight_number: str | None = None,
     provider: str | None = None,
     destination: str | None = None,
+    origin: str | None = None,
+    scheduled_dep: str | None = None,
+    scheduled_arr: str | None = None,
 ) -> dict:
     """Inbound 항공기를 추적한다. 통합 진입점."""
     if not tail_number and not flight_number:
         return {"available": False, "reason": "no_identifier"}
 
-    # 캐시 키
+    # 주기적으로 오래된 estimator 정리
+    _cleanup_estimators()
+
+    # 캐시 키 — 스케줄 컨텍스트는 캐시 키에 포함하지 않음 (동일 항공기)
     cache_key = f"flight:{tail_number or ''}:{flight_number or ''}:{provider or 'auto'}:{destination or ''}"
     cached = _get_cached(cache_key)
     if cached is not None:
         return cached
+
+    # 스케줄 컨텍스트 (하이브리드 ETA용)
+    schedule_ctx = {
+        "origin": origin,
+        "scheduled_dep": scheduled_dep,
+        "scheduled_arr": scheduled_arr,
+    }
 
     # provider 지정 시
     if provider == "opensky":
@@ -156,7 +204,7 @@ async def track_inbound(
             return {"available": False, "reason": "opensky_requires_tail_number", "provider": "opensky"}
         result = await _fetch_opensky(tail_number)
         if result:
-            normalized = _normalize_opensky(result, tail_number, destination)
+            normalized = _normalize_opensky(result, tail_number, destination, schedule_ctx)
             _set_cache(cache_key, normalized)
             return normalized
         return {"available": False, "reason": "no_data", "provider": "opensky"}
@@ -183,7 +231,7 @@ async def track_inbound(
     if tail_number:
         result = await _fetch_opensky(tail_number)
         if result:
-            normalized = _normalize_opensky(result, tail_number, destination)
+            normalized = _normalize_opensky(result, tail_number, destination, schedule_ctx)
             _set_cache(cache_key, normalized)
             return normalized
 
@@ -228,11 +276,17 @@ async def _fetch_opensky(tail_number: str) -> Optional[list]:
         return None
 
 
-def _normalize_opensky(state: list, tail_number: str, destination: Optional[str]) -> dict:
-    """OpenSky state vector를 통일된 형식으로 정규화한다."""
+def _normalize_opensky(
+    state: list,
+    tail_number: str,
+    destination: Optional[str],
+    schedule_ctx: Optional[dict] = None,
+) -> dict:
+    """OpenSky state vector를 통일된 형식으로 정규화한다. 비행 단계 추정 포함."""
     from app.services.airport import get_coordinates
 
     callsign = (state[1] or "").strip()
+    icao24 = (state[0] or "").strip()
     lon = state[5]
     lat = state[6]
     baro_alt_m = state[7]
@@ -240,25 +294,109 @@ def _normalize_opensky(state: list, tail_number: str, destination: Optional[str]
     velocity_ms = state[9]
     heading = state[10]
     vertical_rate_ms = state[11]
+    time_position = state[3]
 
     # 단위 변환
     alt_ft = round(baro_alt_m * 3.28084) if baro_alt_m is not None else None
     speed_kts = round(velocity_ms * 1.94384) if velocity_ms is not None else None
     vrate_fpm = round(vertical_rate_ms * 196.85) if vertical_rate_ms is not None else None
 
-    # 목적지까지 거리 + ETA 계산
+    # 출발/도착 좌표 + 거리 계산
     distance_nm = None
-    eta_utc = None
-    eta_minutes = None
+    dist_from_dep = None
+    total_distance = None
+    dest_coords = None
+    origin_coords = None
+
+    sched = schedule_ctx or {}
+    origin_code = sched.get("origin") or ""
+
+    if origin_code and lat is not None and lon is not None:
+        origin_coords = get_coordinates(origin_code)
+        if origin_coords:
+            dist_from_dep = round(_haversine_nm(lat, lon, origin_coords[0], origin_coords[1]), 1)
 
     if destination and lat is not None and lon is not None:
         dest_coords = get_coordinates(destination)
         if dest_coords:
             distance_nm = round(_haversine_nm(lat, lon, dest_coords[0], dest_coords[1]), 1)
-            if speed_kts and speed_kts > 0 and not on_ground:
-                eta_minutes = _estimate_eta_minutes(distance_nm, speed_kts, alt_ft or 0)
-                if eta_minutes is not None:
-                    eta_utc = (datetime.now(timezone.utc) + timedelta(minutes=eta_minutes)).isoformat()
+
+    # 총 비행 거리 (출발~도착 공항 간)
+    if origin_coords and dest_coords:
+        total_distance = round(
+            _haversine_nm(origin_coords[0], origin_coords[1], dest_coords[0], dest_coords[1]), 1
+        )
+    elif distance_nm is not None and dist_from_dep is not None:
+        total_distance = distance_nm + dist_from_dep
+
+    # ── 비행 단계 추정 ──
+    phase_str = None
+    phase_label = None
+    phase_short = None
+    progress = None
+    is_short_leg = False
+
+    if (
+        icao24
+        and lat is not None
+        and lon is not None
+        and alt_ft is not None
+        and speed_kts is not None
+        and vrate_fpm is not None
+        and distance_nm is not None
+    ):
+        td = total_distance or (distance_nm + (dist_from_dep or 0))
+        estimator = _get_estimator(icao24, td)
+
+        flight_state = FlightState(
+            time=time_position or int(time.time()),
+            lat=lat,
+            lon=lon,
+            altitude=alt_ft,
+            velocity=speed_kts,
+            vertical_rate=vrate_fpm,
+            true_track=heading or 0.0,
+            on_ground=on_ground or False,
+            dist_to_arr=distance_nm,
+            dist_from_dep=dist_from_dep or 0.0,
+        )
+
+        estimator.update(flight_state)
+        phase = estimator.estimate(flight_state)
+        progress = round(estimator.get_progress(flight_state) * 100, 1)
+
+        phase_str = phase.value
+        short, label = PHASE_DISPLAY.get(phase, ("?", "Unknown"))
+        phase_short = short
+        phase_label = label
+
+        is_short_leg = should_simplify_display(td)
+
+    # ── ETA 계산 (하이브리드) ──
+    eta_utc = None
+
+    sched_dep_str = sched.get("scheduled_dep")
+    sched_arr_str = sched.get("scheduled_arr")
+    sched_dep_dt = _parse_iso(sched_dep_str) if sched_dep_str else None
+    sched_arr_dt = _parse_iso(sched_arr_str) if sched_arr_str else None
+
+    # 실제 출발 시점 추정: 비행 중이고 출발 공항 근처 기록이 없으면 스케줄 기반
+    actual_dep_dt = sched_dep_dt if (not on_ground and sched_dep_dt) else None
+
+    if distance_nm is not None and speed_kts is not None and not on_ground:
+        prog = (progress or 0) / 100.0
+        hybrid_eta = calculate_hybrid_eta(
+            scheduled_dep=sched_dep_dt,
+            scheduled_arr=sched_arr_dt,
+            actual_dep=actual_dep_dt,
+            progress=prog,
+            dist_remaining=distance_nm,
+            current_speed=speed_kts,
+        )
+        if hybrid_eta:
+            eta_utc = hybrid_eta.isoformat()
+    elif sched_arr_dt:
+        eta_utc = sched_arr_dt.isoformat()
 
     # 상태 결정
     if on_ground:
@@ -276,15 +414,15 @@ def _normalize_opensky(state: list, tail_number: str, destination: Optional[str]
         "tail_number": tail_number,
         "status": status,
         "departure": {
-            "airport": "",
-            "scheduled": None,
+            "airport": origin_code,
+            "scheduled": sched_dep_str,
             "estimated": None,
             "actual": None,
             "delay_minutes": None,
         },
         "arrival": {
             "airport": destination or "",
-            "scheduled": None,
+            "scheduled": sched_arr_str,
             "estimated": eta_utc,
             "actual": None,
             "delay_minutes": None,
@@ -298,6 +436,12 @@ def _normalize_opensky(state: list, tail_number: str, destination: Optional[str]
             "vertical_rate": vrate_fpm,
             "on_ground": on_ground,
             "distance_nm": distance_nm,
+            "phase": phase_str,
+            "phase_label": phase_label,
+            "phase_short": phase_short,
+            "progress": progress,
+            "total_distance": total_distance,
+            "short_leg": is_short_leg,
         },
         "fetched_at": time.time(),
     }
@@ -503,12 +647,17 @@ def _calc_delay_minutes(scheduled: str | None, estimated: str | None) -> int | N
     if not scheduled or not estimated:
         return None
     try:
-        from datetime import datetime
-
-        # ISO 8601 파싱
         sched = datetime.fromisoformat(scheduled.replace("Z", "+00:00"))
         est = datetime.fromisoformat(estimated.replace("Z", "+00:00"))
         diff = (est - sched).total_seconds() / 60
         return int(diff)
+    except Exception:
+        return None
+
+
+def _parse_iso(s: str) -> Optional[datetime]:
+    """ISO 8601 문자열을 datetime으로 파싱한다."""
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
     except Exception:
         return None

@@ -94,28 +94,45 @@ export default function Dashboard() {
     return null;
   }, [pairings, now]);
 
-  // 현재 레그에 tail 없으면 같은 트립에서 역순 탐색
-  const effectiveTailNumber = useMemo(() => {
-    if (!nextFlight) return null;
-    if (nextFlight.leg.tail_number) return nextFlight.leg.tail_number;
+  // 현재 레그에 tail 없으면 같은 트립에서 역순 탐색 + 인바운드 스케줄 컨텍스트
+  const { effectiveTailNumber, inboundScheduleCtx } = useMemo(() => {
+    if (!nextFlight) return { effectiveTailNumber: null, inboundScheduleCtx: null };
 
-    // 트립 전체 레그를 순서대로 펼침
     const allLegs = nextFlight.pairing.days.flatMap((d) => d.legs);
-
-    // 현재 레그 위치 찾기
     const curIdx = allLegs.findIndex(
       (l) =>
         l.flight_number === nextFlight.leg.flight_number &&
         l.flight_date === nextFlight.leg.flight_date &&
         l.origin === nextFlight.leg.origin
     );
-    if (curIdx < 0) return null;
 
-    // 바로 직전 레그부터 역순으로 tail 탐색
-    for (let i = curIdx - 1; i >= 0; i--) {
-      if (allLegs[i].tail_number) return allLegs[i].tail_number;
+    // tail 탐색
+    let tail = nextFlight.leg.tail_number;
+    if (!tail && curIdx > 0) {
+      for (let i = curIdx - 1; i >= 0; i--) {
+        if (allLegs[i].tail_number) {
+          tail = allLegs[i].tail_number;
+          break;
+        }
+      }
     }
-    return null;
+
+    // 인바운드 스케줄 컨텍스트: 직전 레그의 출발/도착 시간
+    let ctx: { origin: string; scheduled_dep: string; scheduled_arr: string } | null = null;
+    if (curIdx > 0) {
+      const prevLeg = allLegs[curIdx - 1];
+      if (prevLeg.depart_utc && prevLeg.arrive_utc && prevLeg.flight_date) {
+        const depStr = toUtcDate(prevLeg.depart_utc, prevLeg.flight_date).toISOString();
+        const arrStr = toUtcDate(prevLeg.arrive_utc, prevLeg.flight_date).toISOString();
+        ctx = {
+          origin: prevLeg.origin,
+          scheduled_dep: depStr,
+          scheduled_arr: arrStr,
+        };
+      }
+    }
+
+    return { effectiveTailNumber: tail || null, inboundScheduleCtx: ctx };
   }, [nextFlight]);
 
   // 이번 달 통계 (완료/전체)
@@ -276,6 +293,9 @@ export default function Dashboard() {
             <InboundAircraft
               tailNumber={effectiveTailNumber}
               destination={nextFlight.leg.origin}
+              origin={inboundScheduleCtx?.origin}
+              scheduledDep={inboundScheduleCtx?.scheduled_dep}
+              scheduledArr={inboundScheduleCtx?.scheduled_arr}
             />
           )}
 

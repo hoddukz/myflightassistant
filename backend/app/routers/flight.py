@@ -18,8 +18,11 @@ async def track_flight(
     flight_number: Optional[str] = Query(None, description="편명 (e.g. DL5678)"),
     provider: Optional[str] = Query(None, description="API provider: opensky | aviationstack | flightlabs"),
     destination: Optional[str] = Query(None, description="도착 공항 IATA (ETA 계산용, e.g. PHX)"),
+    origin: Optional[str] = Query(None, description="출발 공항 IATA (비행 단계 추정용)"),
+    scheduled_dep: Optional[str] = Query(None, description="스케줄 출발시간 ISO 8601 (하이브리드 ETA용)"),
+    scheduled_arr: Optional[str] = Query(None, description="스케줄 도착시간 ISO 8601 (하이브리드 ETA용)"),
 ):
-    """Inbound 항공기를 추적한다."""
+    """Inbound 항공기를 추적한다. 비행 단계 추정 + 하이브리드 ETA 포함."""
     if not tail_number and not flight_number:
         raise HTTPException(
             status_code=400,
@@ -30,6 +33,9 @@ async def track_flight(
         flight_number=flight_number,
         provider=provider,
         destination=destination,
+        origin=origin,
+        scheduled_dep=scheduled_dep,
+        scheduled_arr=scheduled_arr,
     )
 
 

@@ -81,6 +81,20 @@ export interface FlightTrackArrival {
   delay_minutes: number | null;
 }
 
+export type FlightPhase =
+  | "gate_departure"
+  | "takeoff"
+  | "climbing"
+  | "cruise"
+  | "step_descent"
+  | "level_off"
+  | "reclimb"
+  | "initial_descent"
+  | "approach"
+  | "final"
+  | "holding"
+  | "arrived";
+
 export interface FlightTrackLive {
   latitude: number | null;
   longitude: number | null;
@@ -90,6 +104,12 @@ export interface FlightTrackLive {
   vertical_rate?: number | null;
   on_ground?: boolean;
   distance_nm?: number | null;
+  phase?: FlightPhase | null;
+  phase_label?: string | null;
+  phase_short?: string | null;
+  progress?: number | null;
+  total_distance?: number | null;
+  short_leg?: boolean;
 }
 
 export interface FlightTrackData {
