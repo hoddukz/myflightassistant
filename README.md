@@ -1,83 +1,117 @@
-# ✈️ MFA (My Flight Assistant)
+# MFA (My Flight Assistant)
 > **Pilot-Centric Schedule Management & Real-time Briefing Automation Solution**
 
-MFA는 번거로운 수동 브리핑 과정을 자동화하고, 개인 스케줄 기반의 실시간 기상/항적 정보를 제공하여 파일럿의 상황 인식(Situational Awareness)을 극대화하는 모바일 최적화 웹앱(PWA)입니다.
+MFA는 파일럿의 수동 브리핑 과정을 자동화하고, 개인 스케줄 기반의 실시간 기상/항적 정보를 제공하여 상황 인식(Situational Awareness)을 극대화하는 모바일 최적화 웹앱(PWA)입니다.
 
 ---
 
-## 1. 프로젝트 핵심 가치
-* **데이터 통합**: 회사 스케줄(`ics`, `csv`)을 통합하여 직관적인 타임라인 제공.
-* **시간 효율성**: 비행 전 날씨, 노탐, 경로상 위험 기상을 1초 만에 확인.
-* **안전 강화**: 경로상 SIGMET/AIRMET 및 실시간 테일 넘버 추적으로 안전한 비행 의사결정 지원.
+## 주요 기능
+
+### 스케줄 관리
+- **멀티 포맷 지원**: iCal(.ics) 및 CSV 파일 업로드
+- **Google Calendar 자동 싱크**: ICS URL 등록 시 자동 동기화
+- **시간 변환**: 공항 코드 기반 UTC/Local Dual Time 표기
+- **크루/호텔 매칭**: 비행 동료 명단 및 레이오버 호텔 정보 자동 추출
+
+### 실시간 브리핑
+- **METAR/TAF**: 출발/도착 공항 기상 색상 코딩 (VFR/MVFR/IFR/LIFR)
+- **NOTAM**: 핵심 키워드(RWY/TWY 폐쇄 등) 하이라이트 및 Critical NOTAM 우선 배치
+- **SIGMET/AIRMET**: 출발-도착지 대권항로 100NM 반경 내 위험 기상 자동 감지 + 경로 지도 시각화
+- **공항 검색**: ICAO 코드 직접 검색 브리핑
+
+### 항공기 추적
+- **Tail Number Tracking**: OpenSky 기반 실시간 항적 추적
+- **FlightAware/Flightradar24 연동**: 외부 추적 서비스 리다이렉트
+
+### 푸시 알림
+- **기상 급변 알림**: 스케줄 공항 기상 변화 감지 시 푸시
+- **리포트 타임 리마인더**: 출근 전 커스텀 시간 알림 (1h/2h/3h + 사용자 지정)
+- **PWA Service Worker**: 백그라운드 푸시 지원
+
+### 세션 관리
+- **동시 로그인 제한**: 최대 2대 기기 동시 접속
+- **비활동 자동 로그아웃**: 30분 미사용 시 자동 로그아웃
+- **Device ID 기반 추적**: 5분 간격 heartbeat로 세션 유지
+
+### 유틸리티
+- **단위 변환기**: 온도, 압력, 고도, 거리, 속도, 무게
+- **비행 메모**: 현재 레그 자동 연결, 시간 기록
 
 ---
 
-## 2. 주요 기능 (Core Features)
-
-### 📂 스케줄 동기화 및 파싱
-* **멀티 포맷 지원**: iCal(UTC 기준) 및 CSV(현지 시각 기준) 파일 통합 업로드 지원.
-* **지능형 시간 변환**: 공항 코드를 기반으로 UTC와 Local Time을 계산하여 **Dual Time**으로 표기.
-* **자동 크루/호텔 매칭**: 비행 동료 명단 및 레이오버 호텔 정보(전화번호 포함) 자동 추출.
-
-### 📡 실시간 브리핑 시스템
-* **Tail-Number Tracking**: 기체 번호(N-Number) 클릭 시 FlightAware/Flightradar24 실시간 항적 페이지로 리다이렉트.
-* **Enroute Hazard 스캔**: 출발-도착지 사이의 대권항로(Great Circle Route) 100NM 반경 내 SIGMET/AIRMET 자동 감지.
-* **Smart Airport Briefing**:
-    * 출발/도착 공항의 METAR/TAF 색상 코딩 (VFR/IFR).
-    * 핵심 NOTAM (RWY/TWY 폐쇄 등) 키워드 하이라이트 및 최상단 배치.
-
-### 🔔 스마트 알림 및 설정
-* **PWA 푸시 알림**: 기상 급변, 스케줄/게이트 변경, 리포트 타임(Report Time) 리마인더 알림 전송.
-* **자격증 갱신 D-Day 알림**: White Card(신검), EPTA, 여권, 비자 등 만료일 입력 후 푸시 알림.
-* **다국어 지원**: 한국어(KO) 및 영어(EN) UI 선택 기능.
-* **사용자 커스텀**: 다크 모드(기본), 거리/속도/고도 단위 설정 및 선호 시간대 설정.
-
-### 🧮 Duty/Rest & Pay 계산
-* **법적 휴식/근무 시간 계산기**: FAR Part 117 기반 Duty Limit 및 최소 휴식 시간 자동 계산.
-* **비행 수당(Pay/Per-diem) 자동 계산**: Block Time, Credit, TAFB 기반 월간 예상 수당 대시보드.
-
-### 📝 개인 메모 & EFB 보조
-* **공항별 개인 메모**: 사용자가 직접 저장하는 공항 팁(셔틀, 난기류, 맛집 등), 해당 공항 스케줄 시 자동 표시.
-
----
-
-## 3. 기술 스택 (Technical Stack)
+## 기술 스택
 
 | 구분 | 기술 | 비고 |
 | :--- | :--- | :--- |
-| **Frontend** | **Next.js (React)** | PWA, 모바일 우선 대응, 다국어(i18n) 지원 |
-| **Backend** | **FastAPI (Python)** | iCal/CSV 파싱, GeoJSON 기반 기상 구역 연산 |
-| **Database** | **Supabase** | 사용자 인증(Auth), 실시간 DB, 푸시 토큰 저장 |
-| **Data API** | **AWC API / AVWX** | 미국 AWC + 글로벌 확장 시 AVWX/CheckWX 검토 |
-| **Caching** | **TanStack Query** | 오프라인 대응, 데이터 신선도(Last updated) 표시 |
-| **Mapping** | **Leaflet / Mapbox** | 경로 및 기상 위험 구역 시각화 |
+| **Frontend** | Next.js 16 (React, Turbopack) | PWA, 모바일 우선, Tailwind CSS v4 |
+| **Backend** | FastAPI (Python) | iCal/CSV 파싱, 기상 API 연동 |
+| **Database** | Supabase (PostgreSQL) | Auth, RLS, 실시간 DB |
+| **State** | Zustand | 클라이언트 상태 관리 (auth, schedule, settings) |
+| **Data API** | NOAA AWC API | METAR/TAF/NOTAM/SIGMET |
+| **Flight Tracking** | OpenSky Network | 실시간 항적 |
+| **Push** | Web Push (VAPID) | pywebpush + Service Worker |
+| **Mapping** | Leaflet | SIGMET/AIRMET 경로 시각화 |
 
 ---
 
-## 4. 데이터 워크플로우 (Workflow)
+## 프로젝트 구조
 
-1. **Upload**: 사용자가 `SkedPlus+` 등에서 받은 파일을 앱에 업로드.
-2. **Process**: 서버에서 테일 넘버, 공항, 시간을 추출하여 UTC로 정규화 저장.
-3. **Fetch**: 추출된 공항/시간 정보를 바탕으로 실시간 날씨 및 NOTAM API 호출.
-4. **Notify**: 변경 사항 발생 시 Service Worker를 통해 사용자 기기에 푸시 전송.
+```
+mfa/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI 앱
+│   │   ├── dependencies/auth.py # JWT + 세션 인증
+│   │   ├── routers/             # schedule, briefing, flight, push, session
+│   │   ├── services/            # DB, 캘린더 싱크, 스케줄러
+│   │   └── parsers/             # ICS/CSV 파서
+│   └── supabase/migrations/     # DB 스키마
+├── frontend/
+│   ├── src/app/                 # Next.js 페이지 (/, /briefing, /schedule, /settings, /login)
+│   ├── src/components/          # UI 컴포넌트
+│   ├── src/stores/              # Zustand 스토어 (auth, schedule, settings)
+│   ├── src/hooks/               # 커스텀 훅 (useActivityTracker, useResolvedTheme)
+│   └── src/lib/                 # API 클라이언트, 유틸리티
+└── docs/
+    └── worklog.md               # 작업 로그
+```
+
+---
+
+## 환경 설정
+
+### 로컬 개발
+```bash
+# 백엔드
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 프론트엔드
+cd frontend
+npm install
+npm run dev
+```
+
+### 환경변수
+- `backend/.env` — Supabase, VAPID, API 키
+- `frontend/.env.local` — NEXT_PUBLIC_API_URL, Supabase anon key
+
+### DB 분리
+| 환경 | Supabase 프로젝트 | 용도 |
+| :--- | :--- | :--- |
+| 로컬 | `ctqccnpufytcbgxcvxit` | 개발/테스트 |
+| 프로덕션 | `luqnrkqbzqbnjuhqekks` | Vercel + Koyeb |
 
 ---
 
-## 5. UI/UX 디자인 원칙 (Mobile-First)
-
-* **Bottom Navigation**: Dashboard, Schedule, Briefing, Crew/Hotel, Settings (5개 메뉴).
-* **Dual-Time Bar**: 상단 바에 현재 UTC와 현지 Local Time을 상시 노출하여 혼선 방지.
-* **Cockpit Mode**: 야간 비행 및 어두운 칵핏 환경을 고려한 저광도 다크 모드 인터페이스.
-* **Red-Light Mode**: Night Vision 보호를 위한 붉은색 톤 UI 옵션.
-* **단위 변환기**: 온도(C/F), 압력(hPa/inHg), 고도(ft/m) 일괄 변경.
-
----
-
-## 6. 개발 로드맵
-* **Phase 1**: iCal/CSV 파서 개발 및 테일 넘버 추적 리다이렉트 구현.
-* **Phase 2**: 공항별 실시간 기상(METAR/TAF) 및 NOTAM 연동.
-* **Phase 3**: 경로상(Enroute) SIGMET 구역 감지 및 PWA 푸시 알림 시스템 구축.
-* **Phase 4**: 오프라인 캐싱, 비행 로그/수당 자동 계산기, Duty/Rest Calculator, 자격증 갱신 알림 추가.
+## 향후 계획
+- 과거 날짜 브리핑 수동 리프레쉬 전환
+- 스케줄 데이터 병합 업로드 (기존 데이터 보존)
+- Red/Night 모드 (야간 비행 나이트비전 보호)
+- Duty/Rest 계산기 (FAR Part 117)
+- 결제 모듈 (Stripe/Lemon Squeezy)
 
 ---
-© 2026 MFA (My Flight Assistant) Project.
+
+(c) 2026 MFA (My Flight Assistant) Project.

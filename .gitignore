@@ -40,6 +40,9 @@ htmlcov/
 # Sample data
 schedule_samples/
 
+# Work orders / feature specs
+new_features/
+
 # Misc
 *.log
 .vercel

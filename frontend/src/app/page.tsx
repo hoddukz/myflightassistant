@@ -9,6 +9,7 @@ import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { getEventTypeLabel, getEventTypeColor, toUtcDate, utcHHMM } from "@/lib/utils";
 import Link from "next/link";
 import InboundAircraft from "@/components/dashboard/InboundAircraft";
+import Far117Card from "@/components/far117/Far117Card";
 import type { Pairing, DayDetail } from "@/types";
 
 export default function Dashboard() {
@@ -266,6 +267,9 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
+
+          {/* FAR 117 FDP Card */}
+          <Far117Card hasPairings={pairings.length > 0} />
 
           {/* Inbound Aircraft Tracker */}
           {nextFlight && (

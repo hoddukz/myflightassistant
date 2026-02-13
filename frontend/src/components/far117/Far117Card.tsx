@@ -1,0 +1,152 @@
+// Tag: core
+// Path: frontend/src/components/far117/Far117Card.tsx
+
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { fetchFar117Status } from "@/lib/api";
+import type { Far117Status } from "@/types";
+import FdpCalculatorModal from "./FdpCalculatorModal";
+
+interface Props {
+  hasPairings: boolean;
+}
+
+export default function Far117Card({ hasPairings }: Props) {
+  const [status, setStatus] = useState<Far117Status | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [calcOpen, setCalcOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!hasPairings) return;
+    setLoading(true);
+    try {
+      const data = await fetchFar117Status();
+      setStatus(data);
+    } catch {
+      // 실패 시 조용히 무시
+    } finally {
+      setLoading(false);
+    }
+  }, [hasPairings]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 스케줄 없으면 계산기만 접근 가능
+  if (!hasPairings) {
+    return (
+      <>
+        <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-zinc-400">FAR 117</span>
+            <button
+              onClick={() => setCalcOpen(true)}
+              className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+            >
+              Calculator
+            </button>
+          </div>
+          <p className="text-xs text-zinc-600 mt-1">Upload schedule to see FDP status</p>
+        </div>
+        <FdpCalculatorModal open={calcOpen} onClose={() => setCalcOpen(false)} />
+      </>
+    );
+  }
+
+  if (loading || !status || !status.fdp) {
+    return (
+      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-zinc-400">FAR 117</span>
+          <span className="text-xs text-zinc-600">{loading ? "Loading..." : ""}</span>
+        </div>
+        {loading && (
+          <div className="mt-2 h-2 bg-zinc-800 rounded-full animate-pulse" />
+        )}
+      </div>
+    );
+  }
+
+  const { fdp, warnings } = status;
+  const pct = fdp.limit_hours > 0
+    ? Math.min((fdp.current_hours / fdp.limit_hours) * 100, 100)
+    : 0;
+
+  // 색상 결정
+  let barColor = "bg-emerald-500";
+  let textColor = "text-emerald-400";
+  if (pct > 90) {
+    barColor = "bg-red-500";
+    textColor = "text-red-400";
+  } else if (pct > 70) {
+    barColor = "bg-amber-500";
+    textColor = "text-amber-400";
+  }
+
+  // Off duty 표시
+  const fdpLabel = fdp.on_duty
+    ? `${fdp.current_hours}h / ${fdp.limit_hours}h`
+    : fdp.next_duty_date
+    ? `Off Duty`
+    : `No upcoming duty`;
+
+  const fdpSub = fdp.on_duty
+    ? `${fdp.remaining_hours}h remaining`
+    : fdp.next_duty_date
+    ? `Next: ${fdp.next_duty_date}`
+    : null;
+
+  return (
+    <>
+      <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
+        {/* Header + FDP */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-400">FDP</span>
+            <span className={`text-sm font-bold font-mono ${textColor}`}>
+              {fdpLabel}
+            </span>
+          </div>
+          {fdpSub && (
+            <span className="text-xs text-zinc-500">{fdpSub}</span>
+          )}
+        </div>
+
+        {/* 프로그레스 바 (on_duty일 때만) */}
+        {fdp.on_duty && (
+          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${barColor}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+
+        {/* 경고 (첫 번째만) */}
+        {warnings.length > 0 && (
+          <p className="text-xs text-amber-400">{warnings[0]}</p>
+        )}
+
+        {/* 버튼 */}
+        <div className="flex gap-2">
+          <a
+            href="/briefing?tab=far117"
+            className="flex-1 text-center py-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
+          >
+            Details
+          </a>
+          <button
+            onClick={() => setCalcOpen(true)}
+            className="flex-1 text-center py-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
+          >
+            Calculator
+          </button>
+        </div>
+      </div>
+
+      <FdpCalculatorModal open={calcOpen} onClose={() => setCalcOpen(false)} />
+    </>
+  );
+}

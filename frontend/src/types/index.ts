@@ -105,4 +105,39 @@ export interface FlightTrackData {
   fetched_at?: number;
 }
 
+export interface Far117Status {
+  has_schedule: boolean;
+  fdp: {
+    current_hours: number;
+    limit_hours: number;
+    remaining_hours: number;
+    legs: number;
+    report_hour_local: number;
+    on_duty: boolean;
+    next_duty_date: string | null;
+  } | null;
+  flight_time: {
+    last_28d: number;
+    limit_28d: number;
+    last_365d: number;
+    limit_365d: number;
+  } | null;
+  rest: {
+    last_rest_hours: number;
+    min_required: number;
+    next_report_earliest: string | null;
+    longest_rest_168h: number;
+    rest_56h_met: boolean;
+  } | null;
+  warnings: string[];
+}
+
+export interface Far117DelayResult {
+  scenario: string;
+  feasible: boolean;
+  new_fdp_hours: number;
+  fdp_limit: number;
+  warnings: string[];
+}
+
 export type ThemeMode = "dark" | "red-light";

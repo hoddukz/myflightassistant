@@ -303,6 +303,34 @@ export async function syncNow() {
   return safeJson(res);
 }
 
+/* ── FAR 117 API ── */
+export async function fetchFar117Status(utcOffset: number = -7) {
+  const headers = await getAuthHeaders();
+  const res = await handleResponse(
+    await fetch(
+      `${API_BASE}/api/far117/status?utc_offset=${utcOffset}`,
+      { headers }
+    )
+  );
+  if (!res.ok) throw new Error("Failed to fetch FAR 117 status");
+  return safeJson(res);
+}
+
+export async function fetchFar117DelaySimulation(
+  minutes: number,
+  utcOffset: number = -7
+) {
+  const headers = await getAuthHeaders();
+  const res = await handleResponse(
+    await fetch(
+      `${API_BASE}/api/far117/simulate/delay?minutes=${minutes}&utc_offset=${utcOffset}`,
+      { headers }
+    )
+  );
+  if (!res.ok) throw new Error("Failed to simulate delay");
+  return safeJson(res);
+}
+
 /* ── Flight API ── */
 export async function fetchFlightTrack({
   tail_number,

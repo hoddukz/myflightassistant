@@ -4,10 +4,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { fetchFullBriefing, fetchAirSigmet } from "@/lib/api";
 import { toUtcDate, utcHHMM } from "@/lib/utils";
+import Far117DetailTab from "@/components/far117/Far117DetailTab";
 import type { FlightLeg } from "@/types";
 
 const RouteMap = dynamic(
@@ -56,10 +58,15 @@ interface TripInfo {
 
 type SortedLeg = FlightLeg & { passed: boolean };
 
+const FAR117_TAB = -1;
+
 export default function BriefingPage() {
   const { pairings } = useScheduleStore();
+  const searchParams = useSearchParams();
   const [activeTripIndex, setActiveTripIndex] = useState(0);
-  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const [activeDayIndex, setActiveDayIndex] = useState(
+    searchParams.get("tab") === "far117" ? FAR117_TAB : 0
+  );
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const lastTripIdRef = useRef<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -328,13 +335,24 @@ export default function BriefingPage() {
               </svg>
             </button>
           </div>
-          {/* Day 탭 */}
-          <div className={`flex gap-1.5 pb-1 ${days.length >= 5 ? "overflow-x-auto" : ""}`}>
+          {/* FAR 117 탭 + Day 탭 */}
+          <div className={`flex gap-1.5 pb-1 overflow-x-auto`}>
+            <button
+              onClick={() => setActiveDayIndex(FAR117_TAB)}
+              className={`shrink-0 px-3 py-2 rounded-lg transition-colors ${
+                activeDayIndex === FAR117_TAB
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <div className="text-xs font-bold">FAR 117</div>
+              <div className="text-xs opacity-70">Duty/Rest</div>
+            </button>
             {days.map((day, i) => (
               <button
                 key={i}
                 onClick={() => setActiveDayIndex(i)}
-                className={`${days.length >= 5 ? "shrink-0" : "flex-1 min-w-0"} px-3 py-2 rounded-lg transition-colors ${
+                className={`shrink-0 px-3 py-2 rounded-lg transition-colors ${
                   activeDayIndex === i
                     ? "bg-blue-600 text-white"
                     : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
@@ -387,8 +405,11 @@ export default function BriefingPage() {
         </div>
       )}
 
+      {/* FAR 117 전체현황 탭 */}
+      {activeDayIndex === FAR117_TAB && <Far117DetailTab />}
+
       {/* 레그별 브리핑 블록 */}
-      {currentDay && (
+      {activeDayIndex !== FAR117_TAB && currentDay && (
         <div className="space-y-5">
           {sortedLegs.map((leg) => (
             <LegBriefingBlock
