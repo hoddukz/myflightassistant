@@ -409,7 +409,9 @@ function InboundCard({
           <div className="flex items-center justify-between">
             {live?.distance_nm != null && (
               <span className="text-xs font-mono text-zinc-500">
-                {live.distance_nm} NM{live.total_distance ? ` / ${live.total_distance} NM` : ""}
+                {live.total_distance
+                  ? `${Math.round(live.total_distance - live.distance_nm)} / ${live.total_distance} NM`
+                  : `${live.distance_nm} NM left`}
               </span>
             )}
             <span className="text-sm font-mono text-blue-400 ml-auto">
