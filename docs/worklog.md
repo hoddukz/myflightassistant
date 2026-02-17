@@ -96,6 +96,21 @@
 
 ---
 
+## 2026-02-17
+
+- 브리핑 Overview 탭 구현 (FAR 117 탭 교체)
+  - FAR 117 상세는 `/duty` 페이지에 이미 존재 → 중복 제거
+  - `OverviewTab.tsx` 신규: Trip Summary / Today / FDP Status / Fatigue Risk / Weather Alerts 5개 섹션
+  - `computeFatigueRisk()` 순수 함수: short rest, consecutive long duty, early/late, 4+ days 감지 → Low/Moderate/High 판정
+  - FDP Status: 온듀티 시 프로그레스 바, 오프듀티 시 텍스트 표시 (빈 바 버그 수정)
+  - Weather Alerts: 오늘+내일은 카테고리 뱃지(VFR/MVFR/IFR/LIFR), Day 3+는 "Not yet available"
+  - Overview 진입 시 FAR 117 fetch + 날씨 프리로드 useEffect 추가
+- 브리핑 Day 탭 과거 날짜 연하게 표시 — 오늘 이전 Day는 `opacity` 낮추어 시각 구분
+- 라이트모드 amber-800/900 추가 + amber-300 대비 개선 (`globals.css`)
+- 앱 사용설명서 작성 (`docs/user-guide.md`)
+
+---
+
 ## 2026-02-13
 
 - BottomNav FAB 리뉴얼
@@ -195,6 +210,8 @@
 ---
 
 ## 완료 항목
+- [x] 브리핑 Overview 탭 구현 + FAR 117 탭 교체 + Day 탭 과거 날짜 연하게 + amber 대비 수정 — 2026-02-17
+- [x] 앱 사용설명서 작성 (`docs/user-guide.md`) — 2026-02-17
 - [x] FAR 117 전체 구현 (백엔드 API + 대시보드 카드 + 브리핑 탭 + FDP 계산기 + 영어화) — 2026-02-13
 - [x] FAR 117 계산 로직 초안 + UI 배치 설계 — 2026-02-12
 - [x] 프로덕션화 검토 (배포/보안/인프라/가격/API 조사) — 2026-02-12

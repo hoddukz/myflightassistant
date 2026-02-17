@@ -5,6 +5,13 @@ MFA는 파일럿의 수동 브리핑 과정을 자동화하고, 개인 스케줄
 
 ---
 
+## 사용 설명서
+
+- [User Guide (English)](docs/user-guide.md)
+- [사용 설명서 (한국어)](docs/user-guide-ko.md)
+
+---
+
 ## 주요 기능
 
 ### 스케줄 관리
