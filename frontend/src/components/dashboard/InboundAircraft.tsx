@@ -415,8 +415,7 @@ function InboundCard({
               </span>
             )}
             <span className="text-sm font-mono text-blue-400 ml-auto">
-              {isShortLeg ? "~" : ""}
-              {countdown.text}
+              ~{countdown.text} left
             </span>
           </div>
         </div>

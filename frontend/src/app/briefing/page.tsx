@@ -7,10 +7,10 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useScheduleStore } from "@/stores/scheduleStore";
-import { fetchFullBriefing, fetchAirSigmet } from "@/lib/api";
+import { fetchFullBriefing, fetchAirSigmet, fetchFar117Status } from "@/lib/api";
 import { toUtcDate, utcHHMM } from "@/lib/utils";
-import Far117DetailTab from "@/components/far117/Far117DetailTab";
-import type { FlightLeg } from "@/types";
+import OverviewTab from "@/components/briefing/OverviewTab";
+import type { FlightLeg, Far117Status, Pairing } from "@/types";
 
 const RouteMap = dynamic(
   () => import("@/components/briefing/RouteMap"),
@@ -58,14 +58,14 @@ interface TripInfo {
 
 type SortedLeg = FlightLeg & { passed: boolean };
 
-const FAR117_TAB = -1;
+const OVERVIEW_TAB = -1;
 
 export default function BriefingPage() {
   const { pairings } = useScheduleStore();
   const searchParams = useSearchParams();
   const [activeTripIndex, setActiveTripIndex] = useState(0);
   const [activeDayIndex, setActiveDayIndex] = useState(
-    searchParams.get("tab") === "far117" ? FAR117_TAB : 0
+    searchParams.get("tab") === "overview" ? OVERVIEW_TAB : 0
   );
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const lastTripIdRef = useRef<string | null>(null);
@@ -80,6 +80,8 @@ export default function BriefingPage() {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const fetchedRef = useRef(new Set<string>());
+  const [far117Status, setFar117Status] = useState<Far117Status | null>(null);
+  const [far117Loading, setFar117Loading] = useState(false);
 
   // 1분마다 현재 시간 갱신 (레그 순환용)
   useEffect(() => {
@@ -228,6 +230,24 @@ export default function BriefingPage() {
     }
   }, [activeDayIndex, days, loadBriefings]);
 
+  // Overview 탭: FAR 117 데이터 fetch
+  useEffect(() => {
+    if (activeDayIndex !== OVERVIEW_TAB) return;
+    setFar117Loading(true);
+    fetchFar117Status()
+      .then(setFar117Status)
+      .catch(() => setFar117Status(null))
+      .finally(() => setFar117Loading(false));
+  }, [activeDayIndex]);
+
+  // Overview 탭: 오늘+내일 날씨 프리로드
+  useEffect(() => {
+    if (activeDayIndex !== OVERVIEW_TAB) return;
+    const preloadDays = trips[activeTripIndex]?.days.slice(0, 2) ?? [];
+    const airports = preloadDays.flatMap((d) => d.airports);
+    if (airports.length > 0) loadBriefings(airports);
+  }, [activeDayIndex, trips, activeTripIndex, loadBriefings]);
+
   // 재시도
   const retryAirport = useCallback(
     (apt: string) => {
@@ -335,33 +355,38 @@ export default function BriefingPage() {
               </svg>
             </button>
           </div>
-          {/* FAR 117 탭 + Day 탭 */}
+          {/* Overview 탭 + Day 탭 */}
           <div className={`flex gap-1.5 pb-1 overflow-x-auto`}>
             <button
-              onClick={() => setActiveDayIndex(FAR117_TAB)}
+              onClick={() => setActiveDayIndex(OVERVIEW_TAB)}
               className={`shrink-0 px-3 py-2 rounded-lg transition-colors ${
-                activeDayIndex === FAR117_TAB
+                activeDayIndex === OVERVIEW_TAB
                   ? "bg-blue-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              <div className="text-xs font-bold">FAR 117</div>
-              <div className="text-xs opacity-70">Duty/Rest</div>
+              <div className="text-xs font-bold">Overview</div>
+              <div className="text-xs opacity-70">Trip</div>
             </button>
-            {days.map((day, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveDayIndex(i)}
-                className={`shrink-0 px-3 py-2 rounded-lg transition-colors ${
-                  activeDayIndex === i
-                    ? "bg-blue-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <div className="text-xs font-bold">Day {i + 1}</div>
-                <div className="text-xs opacity-70 truncate">{day.dateFormatted}</div>
-              </button>
-            ))}
+            {days.map((day, i) => {
+              const isPast = day.date < todayStr;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setActiveDayIndex(i)}
+                  className={`shrink-0 px-3 py-2 rounded-lg transition-colors ${
+                    activeDayIndex === i
+                      ? "bg-blue-600 text-white"
+                      : isPast
+                        ? "bg-zinc-800/60 text-zinc-600 hover:text-zinc-400"
+                        : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="text-xs font-bold">Day {i + 1}</div>
+                  <div className="text-xs opacity-70 truncate">{day.dateFormatted}</div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -405,11 +430,20 @@ export default function BriefingPage() {
         </div>
       )}
 
-      {/* FAR 117 전체현황 탭 */}
-      {activeDayIndex === FAR117_TAB && <Far117DetailTab />}
+      {/* Overview 탭 */}
+      {activeDayIndex === OVERVIEW_TAB && (
+        <OverviewTab
+          trip={trips[activeTripIndex] ?? null}
+          pairing={pairings.find((p: Pairing) => p.pairing_id === trips[activeTripIndex]?.pairingId) ?? null}
+          briefingCache={briefingCache}
+          loadingAirports={loadingAirports}
+          far117Status={far117Status}
+          far117Loading={far117Loading}
+        />
+      )}
 
       {/* 레그별 브리핑 블록 */}
-      {activeDayIndex !== FAR117_TAB && currentDay && (
+      {activeDayIndex !== OVERVIEW_TAB && currentDay && (
         <div className="space-y-5">
           {sortedLegs.map((leg) => (
             <LegBriefingBlock

@@ -4,7 +4,7 @@
 # MFA Worklog
 
 ## 긴급 오류/수정사항
-(없음)
+- [ ] 하이브리드 ETA sanity check 검증 필요 — 스케줄 기반 ETA와 거리/속도 기반 ETA 불일치 시 fallback 로직 추가함. 실제 비행 데이터로 정확도 검증 필요 (테스트 ICS는 가짜 스케줄이라 검증 불가)
 
 ## 오류/수정사항/작업예정
 
@@ -14,6 +14,23 @@
 - [ ] CORS 프로덕션 도메인 고정 — 현재 `CORS_ORIGINS` 환경변수 구조는 있지만 `*` 가능. 프로덕션에서는 Vercel 도메인만 허용 필요. Koyeb 환경변수에 도메인 넣으면 끝
 
 ### 단기 (제품 완성도)
+- [ ] **유료화 전 법적/라이선싱 검토** — 아래 항목 모두 상업적 이용 조건 확인 필요
+  - [ ] ❌ **OpenSky Network API** — 개인/비영리만 무료, 상업용 별도 라이선스 필요 (확인됨). FlightAware AeroAPI로 전환 필수. 멀티 프로바이더 구조에 `_fetch_flightaware()` 추가만으로 전환 가능
+  - [ ] ⚠️ **GoFlightLabs API** — 상업적 이용 약관 확인 필요 (fallback 프로바이더)
+  - [ ] ⚠️ **AviationStack API** — 상업적 이용 약관 확인 필요 (fallback 프로바이더)
+  - [ ] ⚠️ **AVWX API** — NOTAM 대체 소스, 상업적 이용 약관 확인 필요
+  - [ ] ✅ **AWC/NOAA (aviationweather.gov)** — US 정부 데이터, public domain (상업 이용 가능)
+  - [ ] ✅ **FAA NOTAM API** — US 정부 데이터, public domain (상업 이용 가능)
+  - [ ] ⚠️ **CartoDB 타일 서비스** — 지도 타일 (`basemaps.cartocdn.com`), 상업 이용 시 유료 티어 또는 약관 확인 필요. 기반 데이터 OpenStreetMap (ODbL 라이선스 — 출처 표기 의무)
+  - [ ] ⚠️ **react-leaflet** — Hippocratic License 2.1 (윤리적 사용 조항 포함, 상업 호환성 논란). 순수 Leaflet(BSD-2) 또는 MapLibre로 교체 검토
+  - [ ] ⚠️ **airports.json 데이터** — 출처 불명, 원본 데이터 소스 및 라이선스/출처표기 요구사항 확인 필요
+  - [ ] ✅ **Supabase** — 유료 플랜 전환 시 상업 이용 가능 (Pro $25/월~)
+  - [ ] ✅ **Vercel** — 유료 플랜 전환 시 상업 이용 가능 (Pro $20/월~)
+  - [ ] ✅ **Koyeb** — 유료 플랜 전환 시 상업 이용 가능
+  - [ ] ✅ **Google Fonts (Inter, JetBrains Mono)** — SIL Open Font License 1.1 (상업 이용 가능)
+  - [ ] ✅ **Material Icons** — Apache License 2.0 (상업 이용 가능)
+  - [ ] ✅ **Web Push (VAPID)** — IETF 표준, 라이선싱 이슈 없음
+  - [ ] ✅ **주요 NPM/Python 패키지** — 대부분 MIT/BSD/Apache 라이선스 (상업 이용 가능)
 - [ ] FDP 계산기 방향 결정 — 대시보드에 이미 FDP 현황(10.8/12h) 표시되므로 계산기 중복 가능성. 선택지: 유지 / Pickup Simulator로 개선 / 제거 / Table B 조회만 축소
 - [ ] 브리핑 과거 날짜 자동 날씨 로딩 제거 — 지난 Day는 수동 리프레쉬 버튼으로만 날씨 조회하도록 변경
 - [ ] 외부 API retry + backoff — AWC, AVWX, FlightAware 등 외부 API에 rate limit 처리 없음. 유저 늘면 API 차단 위험. `httpx` 호출에 retry + exponential backoff + 요청 횟수 카운터 추가. 간헐적 실패 시 브리핑 날씨 빈칸 발생
@@ -29,13 +46,76 @@
 
 ### 장기 (유저 30명+)
 - [ ] 스케줄러 큐 기반 전환 — `reminder_scheduler.py`에서 매 60초 전체 유저 풀스캔. 유저 늘면 DB 부하 급증. 스케줄 업로드 시 `reminder_queue` 테이블에 발송 시점 미리 계산, 스케줄러는 `WHERE send_at <= now() AND sent = false`만 조회. 또는 Supabase `pg_cron` + Edge Function
-- [ ] 딜레이/캔슬 실시간 알림 — FlightAware AeroAPI Standard($100/월) 필요. 유저 30명+ 확보 후 전환 목표. 그전까지 Personal 티어($5 무료크레딧) + 스마트 폴링(출발 3-4h 전부터만)으로 대체
-- [ ] 결제 모듈 구현 — Stripe 연간결제 기본 ($36/년 ≈ $3/월). 한국 사업자 등록 필요. 구독 상태 기반 기능 제한 구조
+- [ ] 딜레이/캔슬 실시간 알림 — FlightAware AeroAPI Alert(웹훅) 활용. Standard 티어 이상 필요
+- [ ] 결제 모듈 구현 — Stripe 연간결제. 한국 사업자 등록 필요. 구독 상태 기반 기능 제한 구조
+
+### 유료화 비용 전략
+
+#### 플랜 구조 (2-Tier)
+- **Basic** ($3/월, $36/년) — 브리핑, FAR 117, 스케줄 관리, 푸시 알림. 비행 추적 미포함 → FlightAware 비용 $0
+- **Pro** ($6/월, $72/년) — Basic + 실시간 비행 추적 + 딜레이 알림
+
+#### 인프라 고정 비용 (유료화 시점)
+| 서비스 | 월 비용 |
+|--------|---------|
+| Supabase Pro | $25 |
+| Vercel Pro | $20 |
+| Koyeb | ~$10 |
+| FlightAware Standard (Pro 플랜 출시 시) | $100 |
+| **Basic만 운영 시** | **~$55/월** (손익분기 19명) |
+| **Pro 포함 시** | **~$155/월** (손익분기 26명, Basic:Pro 50:50 가정) |
+
+#### 비행 추적 API 전환 전략
+- **현재 → 유저 30명**: OpenSky 무료 유지 (비상업 단계, 무료 배포)
+- **유료 전환 시점**: Basic 플랜만 먼저 출시 → FlightAware 비용 불필요
+- **유저 50명+**: Pro 플랜 추가 → FlightAware Standard($100/월) 도입
+- **유저 100명+**: FlightAware Alert 웹훅으로 딜레이/캔슬 실시간 알림 추가
+
+#### 비행 추적 API 비용 통제: 수동 리프레쉬 + 월간 횟수 제한
+- 자동 60초 폴링 제거 → 수동 리프레쉬 버튼 방식으로 전환
+- SkyWest 단거리 기준: 월 15일 출근 × 5회/일 = **75회/월** (여유 포함 100회/월 한도)
+- API 비용: 100회 × $0.01 = **$1/유저/월** → Pro $6 기준 마진 $5
+- UI에 잔여 횟수 표시 ("Refresh 187/200 left"), 월초 리셋
+- FlightAware 전환 시 fallback 체인(FlightLabs/AviationStack) 제거 → 단일 프로바이더로 단순화
+
+#### 비용 통제 전략 우선순위 (SkyWest 2인 크루 기준)
+1. **수동 리프레쉬 + 월간 횟수 제한** — 비용 확정, 구현 간단
+2. **탭 비활성 시 폴링 중지** — 자동 폴링 유지할 경우 필수
+3. **스마트 폴링 (비행 단계별 주기 조절)** — 자동 폴링 유지할 경우 70-80% 절감
+4. ~~서버사이드 캐시~~ — 효과 없음 (SkyWest 2인 크루, 동일 편 동시 조회 확률 ~0%)
+
+#### 비용 시뮬레이션 (Pro 유저 기준, 수동 리프레쉬 100회/월 한도)
+| Pro 유저 수 | 월 API 비용 (쿼리) | FlightAware 기본료 | 총 API 비용 | Pro 수익 | 손익 |
+|------------|-------------------|-------------------|-------------|---------|------|
+| 10명 | $10 | $100 | $110 | $60 | -$50 |
+| 20명 | $20 | $100 | $120 | $120 | ±$0 |
+| 30명 | $30 | $100 | $130 | $180 | +$50 |
+| 50명 | $50 | $100 | $150 | $300 | +$150 |
+
+**Pro 플랜 손익분기: ~20명** (Basic 수익으로 인프라 비용 커버 가정)
 
 ---
 
 ## 2026-02-13
 
+- BottomNav FAB 리뉴얼
+  - FAB 버튼 + 확장 메뉴 (Crew/Hotel→/crew, Schedule→/settings?tab=schedule, Settings→/settings)
+  - Duty 페이지 신규: FDP Status + Cumulative Limits + Pickup Simulator + Table B
+  - Far117Card: /duty 링크 연결
+  - Settings: ?tab=schedule 쿼리 파라미터 지원
+- 비행 단계 추정 엔진 구현 (flight_phase.py)
+  - 12단계 Phase enum + FlightPhaseEstimator (ADS-B 히스토리 10분 버퍼 기반)
+  - 하이브리드 ETA: 스케줄 비행시간 기본 + 실측 보정 + 30% 이상 괴리 시 거리/속도 fallback
+  - 홀딩 패턴 감지: 헤딩 누적 변화 300°+ / 좁은 위치 범위 / 고도 유지
+  - flight_tracker.py 통합: 항공기별 estimator 인메모리 관리, 응답에 phase/progress 추가
+  - 라우터: origin/scheduled_dep/scheduled_arr 파라미터 추가
+- InboundAircraft UI 업그레이드
+  - 비행 단계 아이콘 + 라벨 (material icons), 단계별 프로그레스 바 색상
+  - 홀딩 경고 배너, 짧은 레그 간소화, ADS-B 면책 조항
+  - 프로그레스 거리 표시 수정 (비행거리/전체 형식)
+  - 콜사인 클릭 → FlightAware 라이브 트래킹 링크
+  - 대시보드에서 이전 레그 스케줄 컨텍스트 추출 후 API에 전달
+- ⚠️ ETA 정확도 미검증: 테스트 ICS가 실제 비행과 불일치하여 하이브리드 ETA sanity check 로직 실제 데이터로 검증 필요
 - FAR 117 백엔드+프론트엔드 연동 완료
   - 디버깅: 백엔드 서버 미재시작으로 `/api/far117/` 라우트 미등록 상태 → 서버 재시작으로 해결
   - 대시보드 카드 (`Far117Card.tsx`): FDP 프로그레스 바 + 28d/365d 요약 정상 표시 확인
@@ -47,6 +127,18 @@
   - 프론트엔드 라벨 3개 한글→영어 (여유→OK, 연장 필요→Extension Req., 상한 초과→Exceeds Limit)
 - 브리핑 FAR 117 탭 위치 이동: Day 탭들 뒤 → 맨 왼쪽(Day 1 앞)으로 변경
 - 프로덕션화 권장사항 9개 항목 현재 상태 점검 + 기존 TODO와 합쳐서 우선순위 4단계로 재정리 (즉시/단기/중기/장기)
+- 유료화 전 법적/라이선싱 전수 조사
+  - 외부 API 6종, 인프라 3종, 프론트 라이브러리/폰트/아이콘, 데이터 소스 전체 점검
+  - 즉시 조치 필요: OpenSky (비상업 전용 확인), react-leaflet (Hippocratic License), CartoDB 타일 약관
+  - 안전 확인: AWC/NOAA, FAA (US 정부 public domain), Google Fonts/Material Icons (SIL/Apache), 주요 패키지 (MIT/BSD)
+  - 확인 필요: GoFlightLabs, AviationStack, AVWX 상업 약관, airports.json 데이터 출처
+- 유료화 비용 전략 수립
+  - OpenSky 대체 API 조사: FlightAware/ADS-B Exchange/AeroDataBox/AviationStack/RadarBox 비교
+  - 핵심 결론: 어떤 API든 상업 이용 = 유료 (FlightAware Standard $100/월 최소). 피더 혜택은 웹 계정만 해당, AeroAPI 상업 라이선스와 무관
+  - 2-Tier 플랜 설계: Basic $3 (추적 미포함) + Pro $6 (추적 포함)
+  - 비행 추적 비용 통제: 자동 폴링 → 수동 리프레쉬 + 월 100회 한도 (유저당 API $1/월)
+  - SkyWest 단거리 2인 크루 특성상 서버 캐시 효과 없음 → 수동 리프레쉬 횟수 제한이 최적 전략
+  - 로드맵: 무료(OpenSky) → Basic만 출시($55/월) → Pro 추가(FlightAware $100/월) → Alert 웹훅
 
 ---
 
@@ -70,7 +162,7 @@
   - Standard: $100/월 최소, Alert 가능, B2C 가능
   - 전략: Personal로 시작 → 유저 30명+ 확보 후 Standard 전환 + Alert(웹훅) 활성화
 - NOTAM 대체 소스 조사 — FAA 웹 스크래핑, AVWX 셀프호스트, Notamify API 등 검토
-- 가격 전략: $3-4/월 (연 $36) 타겟. Stripe 연간결제로 수수료 최소화
+- 가격 전략: Basic $3/월 + Pro $6/월 2-Tier. Stripe 연간결제로 수수료 최소화
 
 ---
 

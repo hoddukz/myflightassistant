@@ -46,10 +46,12 @@ body {
   --color-blue-900: #eff6ff;
 
   /* Amber */
-  --color-amber-300: #fcd34d;
+  --color-amber-300: #b45309;
   --color-amber-400: #d97706;
   --color-amber-500: #b45309;
   --color-amber-600: #92400e;
+  --color-amber-800: #fef3c7;
+  --color-amber-900: #fffbeb;
 
   /* Emerald/Green */
   --color-emerald-400: #047d55;

@@ -283,6 +283,13 @@ def calculate_hybrid_eta(
 
     scheduled_flight_min = (scheduled_arr - scheduled_dep).total_seconds() / 60
 
+    # 거리/속도 기반 ETA (sanity check용)
+    speed_eta = None
+    speed_remaining_min = None
+    if current_speed > 0 and dist_remaining > 0:
+        speed_remaining_min = (dist_remaining / current_speed) * 60
+        speed_eta = now + timedelta(minutes=speed_remaining_min)
+
     # 출발 전: 스케줄 시간 그대로
     if actual_dep is None:
         return scheduled_arr
@@ -291,9 +298,8 @@ def calculate_hybrid_eta(
     base_eta = actual_dep + timedelta(minutes=scheduled_flight_min)
 
     # 어프로치 이후 (75%+): 실측 기반이 더 정확
-    if progress > 0.75 and current_speed > 0:
-        remaining_min = (dist_remaining / current_speed) * 60
-        return now + timedelta(minutes=remaining_min)
+    if progress > 0.75 and speed_eta:
+        return speed_eta
 
     # 엔루트 (20~75%): 스케줄 기반 + 진행률 보정
     if progress > 0.2 and scheduled_flight_min > 0:
@@ -301,9 +307,25 @@ def calculate_hybrid_eta(
         expected_progress = elapsed_min / scheduled_flight_min
         deviation = progress - expected_progress
         adjustment_min = deviation * scheduled_flight_min * 0.5
-        return base_eta - timedelta(minutes=adjustment_min)
+        hybrid_eta = base_eta - timedelta(minutes=adjustment_min)
 
-    # 상승 중: 스케줄 기반 ETA
+        # sanity check: 거리/속도 ETA와 30% 이상 차이나면 거리/속도 기반 사용
+        if speed_eta and speed_remaining_min:
+            hybrid_remaining = (hybrid_eta - now).total_seconds() / 60
+            if hybrid_remaining > 0 and speed_remaining_min > 0:
+                ratio = hybrid_remaining / speed_remaining_min
+                if ratio < 0.7 or ratio > 1.3:
+                    return speed_eta
+        return hybrid_eta
+
+    # 상승 중: 스케줄 기반 ETA (sanity check 적용)
+    if speed_eta and speed_remaining_min:
+        base_remaining = (base_eta - now).total_seconds() / 60
+        if base_remaining > 0 and speed_remaining_min > 0:
+            ratio = base_remaining / speed_remaining_min
+            if ratio < 0.7 or ratio > 1.3:
+                return speed_eta
+
     return base_eta
 
 
