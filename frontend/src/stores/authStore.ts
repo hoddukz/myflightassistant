@@ -12,6 +12,7 @@ interface AuthState {
   session: Session | null;
   loading: boolean;
   isPasswordRecovery: boolean;
+  _initialized: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
@@ -25,6 +26,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   session: null,
   loading: true,
   isPasswordRecovery: false,
+  _initialized: false,
 
   signIn: async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -86,6 +88,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   initialize: async () => {
+    if (get()._initialized) return;
+    set({ _initialized: true });
+
     const {
       data: { session },
     } = await supabase.auth.getSession();

@@ -19,14 +19,13 @@ export default function DualTimeBar() {
   const utc = now.toISOString().slice(11, 19);
   const utcDate = now.toISOString().slice(0, 10);
 
-  // 다음 리포트 시간 찾기 (UTC 기준)
+  // 다음 리포트 시간 찾기 (pairings 변경 시에만 재계산)
   const nextReport = useMemo(() => {
-    const nowUtc = now.getTime();
+    const nowUtc = Date.now();
     for (const p of pairings) {
       if (p.event_type !== "pairing") continue;
       if (new Date(p.end_utc).getTime() < nowUtc) continue;
       for (const d of p.days) {
-        // report_time_utc 우선, 없으면 report_time을 UTC로 해석
         const rtUtc = d.report_time_utc || d.report_time;
         if (!rtUtc) continue;
         const reportDateTime = toUtcDate(rtUtc, d.flight_date);
@@ -36,9 +35,9 @@ export default function DualTimeBar() {
       }
     }
     return null;
-  }, [pairings, now]);
+  }, [pairings]);
 
-  // 카운트다운 계산
+  // 카운트다운 계산 (1초 타이머로 갱신)
   const countdown = useMemo(() => {
     if (!nextReport) return null;
     const diffMs = nextReport.getTime() - now.getTime();

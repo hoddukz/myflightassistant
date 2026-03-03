@@ -2,9 +2,12 @@
 # Path: /Users/hodduk/Documents/git/mfa/backend/app/services/calendar_sync.py
 
 import asyncio
+import ipaddress
+import socket
 from datetime import datetime, timezone
 from functools import partial
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -27,8 +30,31 @@ def should_sync(last_synced_at: Optional[str]) -> bool:
     return elapsed >= SYNC_INTERVAL_SECONDS
 
 
+def _validate_url(url: str) -> None:
+    """URL이 https://이고 private IP가 아닌지 검증한다 (SSRF 방어)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Only https:// URLs are allowed")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid URL: missing hostname")
+
+    # DNS 조회 후 private IP 여부 확인
+    try:
+        addrs = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise ValueError(f"Cannot resolve hostname: {hostname}")
+
+    for family, _, _, _, sockaddr in addrs:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError(f"URL resolves to a private/reserved IP: {ip}")
+
+
 async def fetch_ics_content(ics_url: str) -> bytes:
     """ICS URL에서 캘린더 데이터를 가져온다."""
+    _validate_url(ics_url)
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(ics_url)
         resp.raise_for_status()
@@ -51,7 +77,7 @@ def _sync_blocking(user_id: str, email: str, content: bytes) -> int:
 async def sync_calendar(user_id: str, email: str, ics_url: str) -> int:
     """ICS URL fetch → 파싱 → DB 저장 → last_synced_at 업데이트. 이벤트 루프를 블로킹하지 않음."""
     content = await fetch_ics_content(ics_url)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     count = await loop.run_in_executor(None, partial(_sync_blocking, user_id, email, content))
     return count
 

@@ -170,95 +170,95 @@ def _check_and_send() -> None:
 
     # 4) 공항별 체크 간격 판단 + METAR fetch + 위험 조건 판별
     loop = asyncio.new_event_loop()
+    try:
+        for icao, leg_infos in airport_legs.items():
+            # 해당 공항 관련 leg 중 가장 가까운 출발 시간 기준으로 체크 간격 결정
+            min_minutes = min(info["minutes_to_dep"] for info in leg_infos)
+            interval = _get_check_interval(min_minutes)
 
-    for icao, leg_infos in airport_legs.items():
-        # 해당 공항 관련 leg 중 가장 가까운 출발 시간 기준으로 체크 간격 결정
-        min_minutes = min(info["minutes_to_dep"] for info in leg_infos)
-        interval = _get_check_interval(min_minutes)
-
-        last = _last_check.get(icao, 0)
-        if now_ts - last < interval:
-            continue
-
-        # METAR fetch (동기 컨텍스트에서 비동기 호출)
-        try:
-            metar = loop.run_until_complete(fetch_metar(icao))
-        except Exception as e:
-            logger.warning("Failed to fetch METAR for %s: %s", icao, e)
-            continue
-
-        _last_check[icao] = now_ts
-
-        if not metar:
-            continue
-
-        conditions = _evaluate_conditions(metar)
-        if not conditions:
-            continue
-
-        # 5) 위험 조건 → 해당 공항의 모든 leg/user에 알림
-        for info in leg_infos:
-            leg = info["leg"]
-            user_id = info["user_id"]
-            push_token = enabled_users.get(user_id)
-            if not push_token:
+            last = _last_check.get(icao, 0)
+            if now_ts - last < interval:
                 continue
 
-            flight_number = leg.get("flight_number", "")
-            origin = leg.get("origin", "")
-            destination = leg.get("destination", "")
-            mins = int(info["minutes_to_dep"])
-            hours = mins // 60
-            remaining_mins = mins % 60
+            # METAR fetch (동기 컨텍스트에서 비동기 호출)
+            try:
+                metar = loop.run_until_complete(fetch_metar(icao))
+            except Exception as e:
+                logger.warning("Failed to fetch METAR for %s: %s", icao, e)
+                continue
 
-            for ctype, cvalue in conditions:
-                # 중복 방지: INSERT ON CONFLICT DO NOTHING
-                try:
-                    insert_result = (
-                        db.table("weather_alert_log")
-                        .insert({
-                            "user_id": user_id,
-                            "flight_leg_id": leg["id"],
-                            "airport": icao,
-                            "condition_type": ctype,
-                            "condition_value": cvalue,
-                        })
-                        .execute()
-                    )
-                except Exception:
-                    # UNIQUE 충돌 → 이미 알림 전송됨
+            _last_check[icao] = now_ts
+
+            if not metar:
+                continue
+
+            conditions = _evaluate_conditions(metar)
+            if not conditions:
+                continue
+
+            # 5) 위험 조건 → 해당 공항의 모든 leg/user에 알림
+            for info in leg_infos:
+                leg = info["leg"]
+                user_id = info["user_id"]
+                push_token = enabled_users.get(user_id)
+                if not push_token:
                     continue
 
-                if not insert_result.data:
-                    continue
+                flight_number = leg.get("flight_number", "")
+                origin = leg.get("origin", "")
+                destination = leg.get("destination", "")
+                mins = int(info["minutes_to_dep"])
+                hours = mins // 60
+                remaining_mins = mins % 60
 
-                # 푸쉬 발송
-                desc = _format_condition(ctype, cvalue)
-                try:
-                    subscription_info = json.loads(push_token)
-                    webpush(
-                        subscription_info=subscription_info,
-                        data=json.dumps({
-                            "title": f"Weather Alert: {icao}",
-                            "body": (
-                                f"{desc}\n"
-                                f"Flight {flight_number} {origin}\u2192{destination} "
-                                f"departs in {hours}h{remaining_mins}m"
-                            ),
-                        }),
-                        vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims={"sub": VAPID_CLAIM_EMAIL},
-                    )
-                    logger.info(
-                        "Weather alert sent: user=%s airport=%s condition=%s",
-                        user_id, icao, ctype,
-                    )
-                except WebPushException as e:
-                    logger.warning("Push failed for user %s: %s", user_id, e)
-                except Exception as e:
-                    logger.error("Unexpected error sending weather alert: %s", e)
+                for ctype, cvalue in conditions:
+                    # 중복 방지: INSERT ON CONFLICT DO NOTHING
+                    try:
+                        insert_result = (
+                            db.table("weather_alert_log")
+                            .insert({
+                                "user_id": user_id,
+                                "flight_leg_id": leg["id"],
+                                "airport": icao,
+                                "condition_type": ctype,
+                                "condition_value": cvalue,
+                            })
+                            .execute()
+                        )
+                    except Exception:
+                        # UNIQUE 충돌 → 이미 알림 전송됨
+                        continue
 
-    loop.close()
+                    if not insert_result.data:
+                        continue
+
+                    # 푸쉬 발송
+                    desc = _format_condition(ctype, cvalue)
+                    try:
+                        subscription_info = json.loads(push_token)
+                        webpush(
+                            subscription_info=subscription_info,
+                            data=json.dumps({
+                                "title": f"Weather Alert: {icao}",
+                                "body": (
+                                    f"{desc}\n"
+                                    f"Flight {flight_number} {origin}\u2192{destination} "
+                                    f"departs in {hours}h{remaining_mins}m"
+                                ),
+                            }),
+                            vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims={"sub": VAPID_CLAIM_EMAIL},
+                        )
+                        logger.info(
+                            "Weather alert sent: user=%s airport=%s condition=%s",
+                            user_id, icao, ctype,
+                        )
+                    except WebPushException as e:
+                        logger.warning("Push failed for user %s: %s", user_id, e)
+                    except Exception as e:
+                        logger.error("Unexpected error sending weather alert: %s", e)
+    finally:
+        loop.close()
 
     # 6) 24시간 이상 된 로그 정리
     try:
@@ -288,8 +288,11 @@ async def _run_loop() -> None:
 def start_weather_scheduler() -> None:
     """백그라운드 weather alert 스케줄러를 시작한다."""
     global _task
+    if not VAPID_PRIVATE_KEY:
+        logger.warning("VAPID_PRIVATE_KEY not set — weather alert scheduler disabled")
+        return
     if _task is None or _task.done():
-        _task = asyncio.get_event_loop().create_task(_run_loop())
+        _task = asyncio.get_running_loop().create_task(_run_loop())
         logger.info("Weather alert scheduler started")
 
 

@@ -2,6 +2,7 @@
 # Path: /Users/hodduk/Documents/git/mfa/backend/app/main.py
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -14,10 +15,20 @@ from app.routers import schedule, briefing, flight, push, session, far117
 from app.services.reminder_scheduler import start_scheduler, stop_scheduler
 from app.services.weather_alert_scheduler import start_weather_scheduler, stop_weather_scheduler
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    start_weather_scheduler()
+    yield
+    stop_scheduler()
+    stop_weather_scheduler()
+
+
 app = FastAPI(
     title="MFA API",
     description="My Flight Assistant - Backend API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -37,17 +48,6 @@ app.include_router(push.router, prefix="/api/push", tags=["push"])
 app.include_router(session.router, prefix="/api/session", tags=["session"])
 app.include_router(far117.router, prefix="/api/far117", tags=["far117"])
 
-
-@app.on_event("startup")
-async def on_startup():
-    start_scheduler()
-    start_weather_scheduler()
-
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    stop_scheduler()
-    stop_weather_scheduler()
 
 
 @app.get("/health")

@@ -12,6 +12,82 @@ import { toUtcDate, utcHHMM } from "@/lib/utils";
 import OverviewTab from "@/components/briefing/OverviewTab";
 import type { FlightLeg, Far117Status, Pairing } from "@/types";
 
+interface CloudLayer {
+  cover: string;
+  base: number | null;
+}
+
+interface MetarData {
+  station?: string;
+  raw: string;
+  category: string;
+  temperature: number | null;
+  wind_direction: number | null;
+  wind_speed: number | null;
+  wind_gust: number | null;
+  visibility: number | null;
+  ceiling: number | null;
+  weather: string | null;
+  clouds: CloudLayer[];
+  fetched_at: number;
+}
+
+interface TafForecast {
+  timeFrom: number | string | null;
+  timeTo: number | string | null;
+  wdir: number | null;
+  wspd: number | null;
+  visib: number | null;
+  wxString: string | null;
+  clouds: CloudLayer[];
+}
+
+interface TafData {
+  station?: string;
+  raw: string;
+  forecasts: TafForecast[];
+  fetched_at: number;
+}
+
+interface NotamItem {
+  id: string | null;
+  text: string;
+  category: string;
+  is_critical: boolean;
+}
+
+interface SigmetItem {
+  type: "SIGMET" | "AIRMET";
+  hazard: string;
+  severity: string | null;
+  altitude_low: string | null;
+  altitude_high: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  movement: string | null;
+  raw: string | null;
+  coords: Array<{ lat: number; lon: number }> | null;
+}
+
+interface SigmetData {
+  origin: { iata: string; lat: number; lon: number } | null;
+  destination: { iata: string; lat: number; lon: number } | null;
+  sigmets: SigmetItem[];
+  airmets: SigmetItem[];
+  total: number;
+}
+
+interface BriefingData {
+  station: string;
+  icao: string;
+  airport: { name: string } | null;
+  metar: MetarData | null;
+  taf: TafData | null;
+  notams: NotamItem[];
+  notam_total: number;
+  notam_critical_count: number;
+}
+
 const RouteMap = dynamic(
   () => import("@/components/briefing/RouteMap"),
   { ssr: false }
@@ -72,9 +148,9 @@ export default function BriefingPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchBriefing, setSearchBriefing] = useState<any>(null);
+  const [searchBriefing, setSearchBriefing] = useState<BriefingData | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [briefingCache, setBriefingCache] = useState<Record<string, any>>({});
+  const [briefingCache, setBriefingCache] = useState<Record<string, BriefingData>>({});
   const [loadingAirports, setLoadingAirports] = useState<Set<string>>(new Set());
   const [errorAirports, setErrorAirports] = useState<Record<string, string>>({});
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -485,7 +561,7 @@ function LegBriefingBlock({
   onRetry,
 }: {
   leg: SortedLeg;
-  briefingCache: Record<string, any>;
+  briefingCache: Record<string, BriefingData>;
   loadingAirports: Set<string>;
   errorAirports: Record<string, string>;
   expandedCard: string | null;
@@ -495,7 +571,7 @@ function LegBriefingBlock({
   const cardKeyOrigin = `${leg.leg_number}-${leg.origin}`;
   const cardKeyDest = `${leg.leg_number}-${leg.destination}`;
 
-  const [sigmetData, setSigmetData] = useState<any>(null);
+  const [sigmetData, setSigmetData] = useState<SigmetData | null>(null);
   const [sigmetLoading, setSigmetLoading] = useState(false);
 
   useEffect(() => {
@@ -618,7 +694,7 @@ function AirportBriefingCard({
   sigmetLoading,
 }: {
   station: string;
-  briefing: any;
+  briefing: BriefingData | null;
   loading: boolean;
   error?: string;
   expanded: boolean;
@@ -626,7 +702,7 @@ function AirportBriefingCard({
   onRetry?: () => void;
   label?: string;
   arrivalEpoch?: number;
-  sigmetData?: any;
+  sigmetData?: SigmetData | null;
   sigmetLoading?: boolean;
 }) {
   const [detailTab, setDetailTab] = useState<"metar" | "taf" | "notam" | "sigmet">(
@@ -715,12 +791,12 @@ function AirportBriefingCard({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {!expanded && sigmetData?.sigmets?.length > 0 && (
+            {!expanded && (sigmetData?.sigmets?.length ?? 0) > 0 && (
               <span className="text-[10px] font-bold bg-red-500 text-white px-1 py-0.5 rounded leading-none">
                 SIG
               </span>
             )}
-            {!expanded && sigmetData?.airmets?.length > 0 && (
+            {!expanded && (sigmetData?.airmets?.length ?? 0) > 0 && (
               <span className="text-[10px] font-bold bg-amber-500 text-white px-1 py-0.5 rounded leading-none">
                 AIR
               </span>
@@ -870,7 +946,7 @@ function AirportBriefingCard({
               {metar.clouds && metar.clouds.length > 0 && (
                 <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
                   <p className="text-[10px] text-zinc-500 uppercase font-semibold mb-1">Cloud Layers</p>
-                  {metar.clouds.map((c: any, i: number) => (
+                  {metar.clouds.map((c: CloudLayer, i: number) => (
                     <div
                       key={i}
                       className="flex justify-between text-sm font-mono"
@@ -913,7 +989,7 @@ function AirportBriefingCard({
               {taf.forecasts && taf.forecasts.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs text-zinc-500">Forecast Periods</p>
-                  {taf.forecasts.map((fc: any, i: number) => {
+                  {taf.forecasts.map((fc: TafForecast, i: number) => {
                     const fcCat = _determineFcCategory(fc);
                     const fcFrom = typeof fc.timeFrom === "string" ? Number(fc.timeFrom) : fc.timeFrom;
                     const fcTo = typeof fc.timeTo === "string" ? Number(fc.timeTo) : fc.timeTo;
@@ -1007,7 +1083,7 @@ function AirportBriefingCard({
                   No NOTAMs available
                 </div>
               ) : (
-                notams.map((n: any, i: number) => (
+                notams.map((n: NotamItem, i: number) => (
                   <div
                     key={i}
                     className={`bg-zinc-900/50 rounded-lg p-3 border ${
@@ -1042,7 +1118,7 @@ function AirportBriefingCard({
 
           {/* SIGMET/AIRMET */}
           {detailTab === "sigmet" && (
-            <SigmetTabContent sigmetData={sigmetData} sigmetLoading={sigmetLoading} />
+            <SigmetTabContent sigmetData={sigmetData ?? null} sigmetLoading={sigmetLoading} />
           )}
         </div>
       )}
@@ -1056,7 +1132,7 @@ function SigmetTabContent({
   sigmetData,
   sigmetLoading,
 }: {
-  sigmetData: any;
+  sigmetData: SigmetData | null;
   sigmetLoading?: boolean;
 }) {
   if (sigmetLoading) {
@@ -1075,16 +1151,16 @@ function SigmetTabContent({
     );
   }
 
-  const sigmets: any[] = sigmetData.sigmets || [];
-  const airmets: any[] = sigmetData.airmets || [];
+  const sigmets: SigmetItem[] = sigmetData.sigmets || [];
+  const airmets: SigmetItem[] = sigmetData.airmets || [];
   const allItems = [...sigmets, ...airmets];
   const origin = sigmetData.origin;
   const destination = sigmetData.destination;
 
   const polygons = allItems
-    .filter((item: any) => item.coords && item.coords.length >= 3)
-    .map((item: any) => ({
-      coords: item.coords,
+    .filter((item: SigmetItem) => item.coords && item.coords.length >= 3)
+    .map((item: SigmetItem) => ({
+      coords: item.coords!,
       type: item.type as "SIGMET" | "AIRMET",
       hazard: item.hazard || "",
     }));
@@ -1124,7 +1200,7 @@ function SigmetTabContent({
           No active SIGMET/AIRMET on this route
         </div>
       ) : (
-        allItems.map((item: any, i: number) => {
+        allItems.map((item: SigmetItem, i: number) => {
           const isSigmet = item.type === "SIGMET";
           return (
             <div
@@ -1260,10 +1336,10 @@ function HighlightedText({ text }: { text: string }) {
   );
 }
 
-function _determineFcCategory(fc: any): string {
+function _determineFcCategory(fc: TafForecast): string {
   const vis = fc.visib;
   const ceil = fc.clouds?.find(
-    (c: any) => c.cover === "BKN" || c.cover === "OVC"
+    (c: CloudLayer) => c.cover === "BKN" || c.cover === "OVC"
   )?.base;
 
   let cat = "VFR";

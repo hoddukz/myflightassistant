@@ -58,7 +58,7 @@ async def upload_ics(
     )
 
     # DB에 저장 (스레드에서 실행하여 이벤트 루프 블로킹 방지)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, partial(save_schedule, current_user["id"], current_user["email"], pairings))
 
     return ScheduleResponse(
@@ -90,7 +90,7 @@ async def get_user_schedule(
     current_user: dict = Depends(get_current_user),
 ):
     """DB에서 현재 사용자의 스케줄을 조회한다."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, partial(get_schedule, current_user["id"]))
     if result is None:
         return ScheduleResponse(pairings=[], total_flights=0)
@@ -102,7 +102,7 @@ async def delete_user_schedule(
     current_user: dict = Depends(get_current_user),
 ):
     """현재 사용자의 스케줄을 DB에서 삭제한다."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, partial(delete_schedule, current_user["id"]))
     return {"message": "Schedule deleted"}
 
@@ -195,7 +195,7 @@ async def sync_now(
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Sync failed: {e}")
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, partial(get_schedule, user_id))
     if result is None:
         return ScheduleResponse(pairings=[], total_flights=0)

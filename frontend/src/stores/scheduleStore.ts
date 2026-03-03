@@ -10,6 +10,7 @@ interface ScheduleState {
   totalFlights: number;
   selectedDate: string | null;
   loading: boolean;
+  error: string | null;
   setPairings: (data: ScheduleResponse) => void;
   setSelectedDate: (date: string | null) => void;
   clearSchedule: () => void;
@@ -22,6 +23,7 @@ export const useScheduleStore = create<ScheduleState>()((set) => ({
   totalFlights: 0,
   selectedDate: null,
   loading: false,
+  error: null,
 
   setPairings: (data) =>
     set({ pairings: data.pairings, totalFlights: data.total_flights }),
@@ -31,23 +33,24 @@ export const useScheduleStore = create<ScheduleState>()((set) => ({
   clearSchedule: () => set({ pairings: [], totalFlights: 0 }),
 
   fetchSchedule: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const data: ScheduleResponse = await apiFetchSchedule();
-      console.log("[scheduleStore] API returned:", data.pairings.length, "pairings,", data.total_flights, "flights");
       set({ pairings: data.pairings, totalFlights: data.total_flights });
     } catch (err) {
-      console.error("[scheduleStore] fetchSchedule failed:", err);
+      set({ error: err instanceof Error ? err.message : "Failed to fetch schedule" });
     } finally {
       set({ loading: false });
     }
   },
 
   uploadSchedule: async (file: File) => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const data: ScheduleResponse = await uploadICS(file);
       set({ pairings: data.pairings, totalFlights: data.total_flights });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Failed to upload schedule" });
     } finally {
       set({ loading: false });
     }

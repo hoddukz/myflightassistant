@@ -168,8 +168,11 @@ async def _run_loop() -> None:
 def start_scheduler() -> None:
     """백그라운드 스케줄러를 시작한다."""
     global _task
+    if not VAPID_PRIVATE_KEY:
+        logger.warning("VAPID_PRIVATE_KEY not set — reminder scheduler disabled")
+        return
     if _task is None or _task.done():
-        _task = asyncio.get_event_loop().create_task(_run_loop())
+        _task = asyncio.get_running_loop().create_task(_run_loop())
         logger.info("Reminder scheduler started")
 
 

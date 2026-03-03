@@ -132,14 +132,21 @@ async def get_route_briefing(
     destination: str = Query(..., description="도착 공항 IATA/ICAO"),
 ):
     """출발/도착 공항의 기상 + NOTAM을 동시에 조회한다."""
-    o_metar, o_taf, o_notams, d_metar, d_taf, d_notams = await asyncio.gather(
+    results = await asyncio.gather(
         fetch_metar(origin),
         fetch_taf(origin),
         fetch_notams(origin),
         fetch_metar(destination),
         fetch_taf(destination),
         fetch_notams(destination),
+        return_exceptions=True,
     )
+    o_metar = results[0] if not isinstance(results[0], Exception) else None
+    o_taf = results[1] if not isinstance(results[1], Exception) else None
+    o_notams = results[2] if not isinstance(results[2], Exception) else []
+    d_metar = results[3] if not isinstance(results[3], Exception) else None
+    d_taf = results[4] if not isinstance(results[4], Exception) else None
+    d_notams = results[5] if not isinstance(results[5], Exception) else []
 
     return {
         "origin": {

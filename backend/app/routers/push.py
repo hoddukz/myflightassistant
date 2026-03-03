@@ -36,7 +36,7 @@ async def subscribe(
     user_id = current_user["id"]
     db = get_supabase()
 
-    subscription_json = json.dumps(payload.dict())
+    subscription_json = json.dumps(payload.model_dump())
     db.table("users").update({"push_token": subscription_json}).eq("id", user_id).execute()
 
     return {"status": "subscribed"}

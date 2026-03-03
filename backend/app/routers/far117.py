@@ -32,11 +32,11 @@ def _compute_status(user_id: str, utc_offset: float):
 
 @router.get("/status")
 async def get_far117_status(
-    utc_offset: float = Query(default=-7.0, description="파일럿 홈베이스 UTC 오프셋"),
+    utc_offset: float = Query(default=-7.0, description="Pilot home-base UTC offset (e.g. -7 for PDT)"),
     current_user: dict = Depends(get_current_user),
 ):
     """현재 FAR 117 상태 조회."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None, partial(_compute_status, current_user["id"], utc_offset)
     )
@@ -87,11 +87,11 @@ async def get_far117_status(
 @router.get("/simulate/delay")
 async def simulate_delay(
     minutes: int = Query(ge=0, le=600, description="딜레이 시간 (분)"),
-    utc_offset: float = Query(default=-7.0, description="파일럿 홈베이스 UTC 오프셋"),
+    utc_offset: float = Query(default=-7.0, description="Pilot home-base UTC offset (e.g. -7 for PDT)"),
     current_user: dict = Depends(get_current_user),
 ):
     """딜레이 시 FDP 영향 시뮬레이션."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None, partial(_compute_status, current_user["id"], utc_offset)
     )

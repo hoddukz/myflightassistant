@@ -274,17 +274,6 @@ export async function deleteCalendarUrl() {
   return safeJson(res);
 }
 
-export async function fetchSyncStatus() {
-  const headers = await getAuthHeaders();
-
-  const res = await fetch(`${API_BASE}/api/schedule/sync-status`, {
-    headers,
-  });
-
-  if (!res.ok) return null;
-  return safeJson(res);
-}
-
 export async function syncNow() {
   const headers = await getAuthHeaders();
 
@@ -304,7 +293,7 @@ export async function syncNow() {
 }
 
 /* ── FAR 117 API ── */
-export async function fetchFar117Status(utcOffset: number = -7) {
+export async function fetchFar117Status(utcOffset: number = -(new Date().getTimezoneOffset() / 60)) {
   const headers = await getAuthHeaders();
   const res = await handleResponse(
     await fetch(

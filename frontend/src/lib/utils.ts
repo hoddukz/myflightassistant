@@ -1,20 +1,6 @@
 // Tag: util
 // Path: /Users/hodduk/Documents/git/mfa/frontend/src/lib/utils.ts
 
-import { format, toZonedTime } from "date-fns-tz";
-
-export function formatUTC(date: Date): string {
-  return format(toZonedTime(date, "UTC"), "HH:mm", { timeZone: "UTC" });
-}
-
-export function formatLocal(date: Date, tz: string): string {
-  return format(toZonedTime(date, tz), "HH:mm", { timeZone: tz });
-}
-
-export function formatDateUTC(date: Date): string {
-  return format(toZonedTime(date, "UTC"), "dd MMM yyyy", { timeZone: "UTC" });
-}
-
 export function getEventTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     pairing: "TRIP",
@@ -59,6 +45,3 @@ export function getTailTrackingUrl(tailNumber: string): string {
   return `https://flightaware.com/live/flight/${tailNumber}`;
 }
 
-export function getFlightAwareUrl(tailNumber: string): string {
-  return `https://www.flightaware.com/live/flight/${tailNumber}`;
-}

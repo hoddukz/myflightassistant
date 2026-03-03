@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/authStore";
 import { useScheduleStore } from "@/stores/scheduleStore";
@@ -13,6 +13,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, initialize } = useAuthStore();
   const fetchSchedule = useScheduleStore((s) => s.fetchSchedule);
+  const hasFetchedRef = useRef<string | null>(null);
 
   useActivityTracker();
 
@@ -24,7 +25,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!loading && !user) {
       router.replace("/login");
     }
-    if (!loading && user) {
+    if (!loading && user && hasFetchedRef.current !== user.id) {
+      hasFetchedRef.current = user.id;
       fetchSchedule();
     }
   }, [loading, user, router, fetchSchedule]);

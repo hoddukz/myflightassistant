@@ -41,13 +41,24 @@ async def get_current_user(
 
     # 세션 검사 (exempt 경로 제외)
     if request.url.path not in SESSION_EXEMPT_PATHS:
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=SESSION_TIMEOUT_MINUTES)).isoformat()
         device_id = request.headers.get("X-Device-ID")
         if device_id:
-            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=SESSION_TIMEOUT_MINUTES)).isoformat()
             result = db.table("user_sessions") \
                 .select("id") \
                 .eq("user_id", user.id) \
                 .eq("device_id", device_id) \
+                .gte("last_activity", cutoff) \
+                .execute()
+            if not result.data:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="session_expired",
+                )
+        else:
+            result = db.table("user_sessions") \
+                .select("id") \
+                .eq("user_id", user.id) \
                 .gte("last_activity", cutoff) \
                 .execute()
             if not result.data:
