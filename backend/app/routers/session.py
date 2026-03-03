@@ -31,6 +31,14 @@ async def register_session(
     user_id = current_user["id"]
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=SESSION_TIMEOUT_MINUTES)).isoformat()
 
+    # public.users에 유저가 없으면 자동 생성 (FK 제약 방어)
+    existing = db.table("users").select("id").eq("id", user_id).execute()
+    if not existing.data:
+        db.table("users").insert({
+            "id": user_id,
+            "email": current_user.get("email", ""),
+        }).execute()
+
     # 만료된 세션 정리
     db.table("user_sessions") \
         .delete() \
